@@ -1,0 +1,77 @@
+#--------------------------------------------------------------
+# Network Stack Variables
+# terraform.tfvars.example을 복사하여 terraform.tfvars 생성
+#--------------------------------------------------------------
+
+# General
+project_name = "test"
+environment  = "dev"
+location     = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Project     = "Azure-Hub-Spoke"
+}
+
+# Subscriptions
+hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Hub Network
+hub_vnet_address_space = ["10.0.0.0/20"]
+hub_subnets = {
+  "GatewaySubnet" = {
+    address_prefixes = ["10.0.0.0/26"]
+  }
+  "DNSResolver-Inbound" = {
+    address_prefixes = ["10.0.0.64/28"]
+    delegation = {
+      name         = "Microsoft.Network.dnsResolvers"
+      service_name = "Microsoft.Network/dnsResolvers"
+      actions      = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+    }
+  }
+  "DNSResolver-Outbound" = {
+    address_prefixes = ["10.0.0.80/28"]
+    delegation = {
+      name         = "Microsoft.Network.dnsResolvers"
+      service_name = "Microsoft.Network/dnsResolvers"
+      actions      = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+    }
+  }
+  "Monitoring-VM-Subnet" = {
+    address_prefixes  = ["10.0.1.0/24"]
+    service_endpoints = ["Microsoft.Storage", "Microsoft.KeyVault"]
+  }
+  "pep-snet" = {
+    address_prefixes                  = ["10.0.4.0/24"]
+    private_endpoint_network_policies = "Disabled"
+    service_endpoints                 = ["Microsoft.Storage", "Microsoft.KeyVault"]
+  }
+}
+
+# Spoke Network
+spoke_vnet_address_space = ["10.1.0.0/24"]
+spoke_subnets = {
+  "apim-snet" = {
+    address_prefixes  = ["10.1.0.0/26"]
+    service_endpoints = ["Microsoft.Storage", "Microsoft.KeyVault", "Microsoft.EventHub"]
+  }
+  "pep-snet" = {
+    address_prefixes                  = ["10.1.0.64/26"]
+    private_endpoint_network_policies = "Disabled"
+  }
+}
+
+# VPN Gateway (선택사항)
+vpn_gateway_sku  = "VpnGw1"
+vpn_gateway_type = "Vpn"
+# vpn_shared_key = "your-vpn-shared-key"
+# local_gateway_configs = []
+
+# API Management - apim 스택에서 관리
+# Azure OpenAI - ai-services 스택에서 관리
+
+# Feature Flags
+enable_dns_forwarding_ruleset = true

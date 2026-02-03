@@ -1,8 +1,22 @@
 #--------------------------------------------------------------
+# Random suffix for unique APIM name
+#--------------------------------------------------------------
+resource "random_string" "apim_suffix" {
+  length  = 4
+  special = false
+  upper   = false
+  
+  keepers = {
+    # Force regeneration only if apim_name changes
+    apim_name = var.apim_name
+  }
+}
+
+#--------------------------------------------------------------
 # API Management
 #--------------------------------------------------------------
 resource "azurerm_api_management" "main" {
-  name                          = "${var.apim_name}-${random_string.ai_storage_suffix.result}"
+  name                          = "${var.apim_name}-${random_string.apim_suffix.result}"
   location                      = azurerm_resource_group.spoke.location
   resource_group_name           = azurerm_resource_group.spoke.name
   publisher_name                = var.apim_publisher_name

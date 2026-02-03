@@ -1,0 +1,32 @@
+#--------------------------------------------------------------
+# Compute Stack Variables
+#--------------------------------------------------------------
+
+# General
+project_name = "test"
+environment  = "dev"
+location     = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Project     = "Azure-Hub-Spoke"
+}
+
+# Subscriptions
+hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Backend Configuration (for remote_state)
+backend_resource_group_name = "terraform-state-rg"
+backend_storage_account_name = "terraformstate"
+backend_container_name = "tfstate"
+
+# VM Configuration
+vm_size          = "Standard_B2s"
+vm_admin_username = "azureadmin"
+vm_admin_password = "YourSecurePassword123!"  # Replace with actual password
+
+# Feature Flags
+enable_monitoring_vm = true
+enable_key_vault = true

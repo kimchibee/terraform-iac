@@ -103,36 +103,16 @@ variable "dns_resolver_name" {
 }
 
 #--------------------------------------------------------------
-# Virtual Machine
+# Virtual Machine (Removed - VM is managed by separate module)
 #--------------------------------------------------------------
-variable "vm_name" {
-  description = "Monitoring VM name"
-  type        = string
-}
-
-variable "vm_size" {
-  description = "VM size"
-  type        = string
-}
-
-variable "vm_admin_username" {
-  description = "VM admin username"
-  type        = string
-}
-
-variable "vm_admin_password" {
-  description = "VM admin password"
-  type        = string
-  sensitive   = true
-}
+# VM은 루트 main.tf의 module.monitoring_vm에서 관리됨
+# hub_vnet 모듈은 네트워크 리소스만 관리하여 독립적으로 배포 가능
 
 #--------------------------------------------------------------
-# Key Vault
+# Key Vault (Removed - Key Vault is managed by storage module)
 #--------------------------------------------------------------
-variable "key_vault_name" {
-  description = "Key Vault name"
-  type        = string
-}
+# Key Vault는 modules/dev/hub/monitoring-storage 모듈에서 관리됨
+# hub_vnet 모듈은 네트워크 리소스만 관리하여 독립적으로 배포 가능
 
 #--------------------------------------------------------------
 # Log Analytics
@@ -146,20 +126,17 @@ variable "log_analytics_workspace_id" {
 #--------------------------------------------------------------
 # Feature Flags
 #--------------------------------------------------------------
-variable "enable_key_vault" {
-  description = "Enable Key Vault deployment"
-  type        = bool
-  default     = true
-}
-
-variable "enable_monitoring_vm" {
-  description = "Enable Monitoring VM deployment"
-  type        = bool
-  default     = true
-}
+# Feature flags removed - hub_vnet 모듈은 네트워크 리소스만 관리
+# Key Vault와 VM은 별도 모듈에서 관리
 
 variable "enable_dns_forwarding_ruleset" {
   description = "Enable DNS Forwarding Ruleset deployment"
   type        = bool
   default     = true
 }
+
+#--------------------------------------------------------------
+# Storage Account IDs for Diagnostic Settings (Removed)
+#--------------------------------------------------------------
+# 진단 설정은 루트 모듈에서 관리하여 모듈 간 순환 의존성을 제거합니다.
+# hub_vnet 모듈은 네트워크 리소스만 관리하고 완전히 독립적으로 배포 가능합니다.

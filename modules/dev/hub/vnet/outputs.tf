@@ -74,64 +74,34 @@ output "private_dns_zone_names" {
 }
 
 #--------------------------------------------------------------
-# VM Outputs
+# Network Security Group Outputs
 #--------------------------------------------------------------
-output "monitoring_vm_id" {
-  description = "Monitoring VM ID"
-  value       = var.enable_monitoring_vm ? azurerm_linux_virtual_machine.monitoring[0].id : null
+output "nsg_monitoring_vm_id" {
+  description = "Monitoring VM NSG ID"
+  value       = azurerm_network_security_group.monitoring_vm.id
 }
 
-output "monitoring_vm_private_ip" {
-  description = "Monitoring VM private IP"
-  value       = var.enable_monitoring_vm ? azurerm_network_interface.monitoring_vm[0].private_ip_address : null
-}
-
-output "monitoring_vm_identity_principal_id" {
-  description = "Monitoring VM Managed Identity principal ID"
-  value       = var.enable_monitoring_vm ? azurerm_linux_virtual_machine.monitoring[0].identity[0].principal_id : null
+output "nsg_pep_id" {
+  description = "Private Endpoint NSG ID"
+  value       = azurerm_network_security_group.pep.id
 }
 
 #--------------------------------------------------------------
-# Key Vault Outputs
+# VM Outputs (Removed - VM is managed by root module monitoring_vm)
 #--------------------------------------------------------------
-output "key_vault_id" {
-  description = "Key Vault ID"
-  value       = var.enable_key_vault ? azurerm_key_vault.hub[0].id : null
-}
-
-output "key_vault_uri" {
-  description = "Key Vault URI"
-  value       = var.enable_key_vault ? azurerm_key_vault.hub[0].vault_uri : null
-}
+# Monitoring VM은 루트 main.tf의 module.monitoring_vm에서 관리됨
 
 #--------------------------------------------------------------
-# Storage Account Outputs
+# Key Vault Outputs (Removed - Key Vault is managed by storage module)
 #--------------------------------------------------------------
-output "storage_account_ids" {
-  description = "Map of storage account IDs"
-  value       = { for k, v in azurerm_storage_account.logs : k => v.id }
-}
-
-output "monitoring_storage_account_ids" {
-  description = "Map of monitoring storage account IDs for Spoke resources"
-  value = {
-    openai     = azurerm_storage_account.logs["aoailog"].id
-    apim       = azurerm_storage_account.logs["apimlog"].id
-    aifoundry  = azurerm_storage_account.logs["aiflog"].id
-    acr        = azurerm_storage_account.logs["acrlog"].id
-    spoke_kv   = azurerm_storage_account.logs["spkvlog"].id
-  }
-}
+# Key Vault는 modules/dev/hub/monitoring-storage 모듈에서 관리됨
 
 #--------------------------------------------------------------
-# Bastion Host Outputs
+# Storage Account Outputs (Removed - Storage is managed by storage module)
 #--------------------------------------------------------------
-output "bastion_host_id" {
-  description = "Bastion Host ID"
-  value       = azurerm_bastion_host.hub.id
-}
+# Storage Account는 modules/dev/hub/monitoring-storage 모듈에서 관리됨
 
-output "bastion_host_fqdn" {
-  description = "Bastion Host FQDN"
-  value       = azurerm_bastion_host.hub.dns_name
-}
+#--------------------------------------------------------------
+# Bastion Host Outputs (Removed - Not used in current architecture)
+#--------------------------------------------------------------
+# Bastion Host는 현재 아키텍처에서 사용하지 않음

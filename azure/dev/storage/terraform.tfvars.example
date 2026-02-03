@@ -1,0 +1,28 @@
+#--------------------------------------------------------------
+# Storage Stack Variables
+# terraform.tfvars.example을 복사하여 terraform.tfvars 생성
+#--------------------------------------------------------------
+
+# General
+project_name = "test"
+environment  = "dev"
+location     = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Project     = "Azure-Hub-Spoke"
+}
+
+# Subscription
+hub_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Backend Configuration (for remote_state)
+backend_resource_group_name = "terraform-state-rg"
+backend_storage_account_name = "terraformstate"
+backend_container_name = "tfstate"
+
+# Feature Flags
+enable_key_vault = true
+enable_monitoring_vm = false
+# monitoring_vm_identity_principal_id = ""  # compute 스택 배포 후 설정

@@ -1,0 +1,28 @@
+#--------------------------------------------------------------
+# Shared Services Stack Variables
+#--------------------------------------------------------------
+
+# General
+project_name = "test"
+environment  = "dev"
+location     = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Project     = "Azure-Hub-Spoke"
+}
+
+# Subscription
+hub_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Backend Configuration (for remote_state)
+backend_resource_group_name = "terraform-state-rg"
+backend_storage_account_name = "terraformstate"
+backend_container_name = "tfstate"
+
+# Log Analytics
+log_analytics_retention_days = 30
+
+# Feature Flags
+enable_shared_services = true

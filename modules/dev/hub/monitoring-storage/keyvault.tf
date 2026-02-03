@@ -25,32 +25,6 @@ resource "azurerm_key_vault" "hub" {
 }
 
 #--------------------------------------------------------------
-# Key Vault
-#--------------------------------------------------------------
-resource "azurerm_key_vault" "hub" {
-  count = var.enable_key_vault ? 1 : 0
-
-  name                          = "${var.key_vault_name}${random_string.storage_suffix.result}"
-  location                      = var.location
-  resource_group_name           = var.resource_group_name
-  tenant_id                     = data.azurerm_client_config.current.tenant_id
-  sku_name                      = "standard"
-  soft_delete_retention_days    = 7
-  purge_protection_enabled      = true
-  public_network_access_enabled = false
-  tags                          = var.tags
-
-  network_acls {
-    default_action             = "Deny"
-    bypass                     = "AzureServices"
-    virtual_network_subnet_ids = [
-      var.monitoring_vm_subnet_id,
-      var.pep_subnet_id
-    ]
-  }
-}
-
-#--------------------------------------------------------------
 # Private Endpoint for Key Vault
 #--------------------------------------------------------------
 resource "azurerm_private_endpoint" "key_vault" {

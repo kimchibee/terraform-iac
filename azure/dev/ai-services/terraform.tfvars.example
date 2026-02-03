@@ -1,0 +1,33 @@
+#--------------------------------------------------------------
+# AI Services Stack Variables
+#--------------------------------------------------------------
+
+# General
+project_name = "test"
+environment  = "dev"
+location     = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Project     = "Azure-Hub-Spoke"
+}
+
+# Subscription
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Backend Configuration (for remote_state)
+backend_resource_group_name = "terraform-state-rg"
+backend_storage_account_name = "terraformstate"
+backend_container_name = "tfstate"
+
+# Azure OpenAI
+openai_sku = "S0"
+openai_deployments = [
+  {
+    name       = "gpt-4"
+    model_name = "gpt-4"
+    version    = "2024-02-15-preview"
+    capacity   = 30
+  }
+]

@@ -1,0 +1,17 @@
+#--------------------------------------------------------------
+# Bootstrap Backend Variables
+# 이 파일을 terraform.tfvars로 복사하여 사용
+#--------------------------------------------------------------
+
+resource_group_name  = "terraform-state-rg"
+storage_account_name = "terraformstate"  # 전역 고유 이름이어야 함 (소문자, 영숫자만)
+container_name       = "tfstate"
+location             = "Korea Central"
+
+# Optional
+# subnet_id = "/subscriptions/.../resourceGroups/.../providers/Microsoft.Network/virtualNetworks/.../subnets/..."
+
+tags = {
+  ManagedBy = "Terraform"
+  Purpose   = "Terraform-Backend"
+}
