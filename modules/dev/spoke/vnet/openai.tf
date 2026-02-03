@@ -1,14 +1,26 @@
 #--------------------------------------------------------------
 # Azure OpenAI Cognitive Service
-# Note: Using fixed suffix "bt77" to match existing Azure resource (test-x-x-aoaibt77)
+# Note: Cognitive Service names must be globally unique
+# Using random suffix for uniqueness
 #--------------------------------------------------------------
+resource "random_string" "openai_suffix" {
+  length  = 4
+  special = false
+  upper   = false
+  
+  keepers = {
+    project = var.project_name
+    name    = var.openai_name
+  }
+}
+
 resource "azurerm_cognitive_account" "openai" {
-  name                          = "${var.openai_name}bt77"  # Fixed to match existing: test-x-x-aoaibt77
+  name                          = "${var.openai_name}${random_string.openai_suffix.result}"
   location                      = azurerm_resource_group.spoke.location
   resource_group_name           = azurerm_resource_group.spoke.name
   kind                          = "OpenAI"
   sku_name                      = var.openai_sku
-  custom_subdomain_name         = "${var.openai_name}bt77"  # Fixed to match existing
+  custom_subdomain_name         = "${var.openai_name}${random_string.openai_suffix.result}"
   public_network_access_enabled = false
   tags                          = var.tags
 

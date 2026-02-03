@@ -119,25 +119,24 @@ git push -u archive archive/pre-split:main
 
 **옵션 A: 새 레포 두 개 생성**
 
-1. **terraform-modules 레포**  
-   - GitHub에서 `org/terraform-modules` (또는 원하는 이름) 생성  
-   - 로컬에서:
+1. **terraform-modules 레포** ([https://github.com/kimchibee/terraform-modules](https://github.com/kimchibee/terraform-modules))  
+   - 로컬에서 (terraform-config 폴더 기준):
      ```bash
+     git remote add modules https://github.com/kimchibee/terraform-modules.git
      git checkout terraform-modules
-     git remote add modules git@github.com:<org>/terraform-modules.git
      git push modules terraform-modules:main
      ```
-   - 이후 모듈 레포는 `main` + Git Tag(v1.0.0 등)로 버전 관리
+   - terraform-modules 레포가 비어 있으면 위 push로 main에 공통 모듈이 올라감.  
+   - 이후 모듈 레포는 `main` + Git Tag(v1.0.0 등)로 버전 관리.
 
-2. **terraform-iac 레포**  
-   - GitHub에서 `org/terraform-iac` 생성  
+2. **terraform-iac 레포** (별도 레포 생성 후)  
    - 로컬에서:
      ```bash
+     git remote add iac https://github.com/kimchibee/terraform-iac.git
      git checkout terraform-iac
-     git remote add iac git@github.com:<org>/terraform-iac.git
      git push iac terraform-iac:main
      ```
-   - terraform-iac 레포의 모듈 소스는 이미 `git::https://github.com/<org>/terraform-modules.git?ref=v1.0.0` 형태로 되어 있음
+   - terraform-iac의 `main.tf` 등에서 모듈 소스는 `git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=v1.0.0` 형태로 참조.
 
 **옵션 B: 현재 레포를 terraform-iac으로 사용**
 

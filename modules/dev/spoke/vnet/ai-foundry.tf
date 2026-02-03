@@ -1,20 +1,23 @@
 #--------------------------------------------------------------
-# Storage Account for AI Foundry
+# Random suffix for AI Foundry resources
+# Storage Account and ACR names must be globally unique
 #--------------------------------------------------------------
-# Fixed suffix to match existing Azure resources (test-x-x-aoaibt77, test-aif-kv-t4ip)
-resource "random_string" "ai_storage_suffix" {
+resource "random_string" "ai_foundry_suffix" {
   length  = 4
   special = false
   upper   = false
   
-  # Override to match existing resources
-  # OpenAI account: test-x-x-aoaibt77 (suffix: bt77)
-  # Key Vault: test-aif-kv-t4ip (suffix: t4ip)
-  # Note: This will be set via terraform.tfvars or override
+  keepers = {
+    project = var.project_name
+    name    = var.ai_foundry_name
+  }
 }
 
+#--------------------------------------------------------------
+# Storage Account for AI Foundry
+#--------------------------------------------------------------
 resource "azurerm_storage_account" "ai_foundry" {
-  name                          = "${replace(var.ai_foundry_name, "-", "")}st"
+  name                          = "${replace(var.ai_foundry_name, "-", "")}st${random_string.ai_foundry_suffix.result}"
   location                      = azurerm_resource_group.spoke.location
   resource_group_name           = azurerm_resource_group.spoke.name
   account_tier                  = "Standard"
@@ -50,7 +53,7 @@ resource "azurerm_application_insights" "ai_foundry" {
 # Container Registry for AI Foundry
 #--------------------------------------------------------------
 resource "azurerm_container_registry" "ai_foundry" {
-  name                          = "${replace(var.ai_foundry_name, "-", "")}acr"
+  name                          = "${replace(var.ai_foundry_name, "-", "")}acr${random_string.ai_foundry_suffix.result}"
   resource_group_name           = azurerm_resource_group.spoke.name
   location                      = azurerm_resource_group.spoke.location
   sku                           = "Premium"

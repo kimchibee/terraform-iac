@@ -122,3 +122,16 @@ output "monitoring_storage_account_ids" {
     spoke_kv   = azurerm_storage_account.logs["spkvlog"].id
   }
 }
+
+#--------------------------------------------------------------
+# Bastion Host Outputs
+#--------------------------------------------------------------
+output "bastion_host_id" {
+  description = "Bastion Host ID"
+  value       = azurerm_bastion_host.hub.id
+}
+
+output "bastion_host_fqdn" {
+  description = "Bastion Host FQDN"
+  value       = azurerm_bastion_host.hub.dns_name
+}

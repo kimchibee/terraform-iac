@@ -1,8 +1,18 @@
 #--------------------------------------------------------------
+# 공통 모듈 저장소 지정
+# - 공통 모듈(terraform-modules) 레포 주소. 새 모듈 추가 시 source에 아래 URL 사용.
+# - 예: source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=v1.0.0"
+# - 각 환경에 맞추어 수정 시: 아래 URL을 해당 환경의 terraform-modules 레포 주소로 변경할 것.
+#   (main.tf 내 모든 module 블록의 source 중 git::...terraform-modules... 부분을 검색·일괄 변경)
+#--------------------------------------------------------------
+# 공통 모듈 저장소 URL (각 환경에 맞추어 수정)
+# https://github.com/kimchibee/terraform-modules.git
+
+#--------------------------------------------------------------
 # Hub VNet Module (Created first - creates resource group)
 #--------------------------------------------------------------
 module "hub_vnet" {
-  source = "./modules/networking/hub-vnet"
+  source = "./modules/dev/hub/vnet"
 
   providers = {
     azurerm = azurerm.hub
@@ -44,39 +54,50 @@ module "hub_vnet" {
 }
 
 #--------------------------------------------------------------
-# Shared Services Module (depends on Hub for resource group)
+# Log Analytics Workspace (공통 모듈)
 #--------------------------------------------------------------
-module "shared_services" {
-  source = "./modules/monitoring/log-analytics"
+module "log_analytics_workspace" {
+  source = "./terraform_modules/log-analytics-workspace"
 
   providers = {
     azurerm = azurerm.hub
   }
 
-  # General
-  project_name = var.project_name
-  environment  = var.environment
-  location     = var.location
-  tags         = var.tags
-
-  # Resource Group (from Hub module output)
-  resource_group_name = module.hub_vnet.resource_group_name
-
-  # Log Analytics
-  log_analytics_workspace_name = local.hub_log_analytics_name
-  log_analytics_retention_days = var.log_analytics_retention_days
-
-  # Feature Flags
-  enable_shared_services = var.enable_shared_services
+  name                = local.hub_log_analytics_name
+  location             = var.location
+  resource_group_name  = module.hub_vnet.resource_group_name
+  retention_in_days    = var.log_analytics_retention_days
+  tags                 = var.tags
 
   depends_on = [module.hub_vnet]
+}
+
+#--------------------------------------------------------------
+# Shared Services: Solutions / Action Group / Dashboard (IaC 모듈)
+#--------------------------------------------------------------
+module "shared_services" {
+  source = "./modules/dev/hub/shared-services"
+
+  providers = {
+    azurerm = azurerm.hub
+  }
+
+  enable                      = var.enable_shared_services
+  resource_group_name         = module.hub_vnet.resource_group_name
+  log_analytics_workspace_id   = module.log_analytics_workspace.id
+  log_analytics_workspace_name = module.log_analytics_workspace.name
+  project_name                 = var.project_name
+  location                     = var.location
+  tags                         = var.tags
+
+  depends_on = [module.log_analytics_workspace, module.hub_vnet]
 }
 
 #--------------------------------------------------------------
 # Storage Module (Key Vault & Monitoring Storage)
 #--------------------------------------------------------------
 module "storage" {
-  source = "./modules/storage/monitoring-storage"
+  source = "./modules/dev/hub/monitoring-storage"
 
   providers = {
     azurerm = azurerm.hub
@@ -106,26 +127,30 @@ module "storage" {
 }
 
 #--------------------------------------------------------------
-# Monitoring VM Module (새 공통 모듈 + 인스턴스 패턴)
+# Monitoring VM (공통 모듈 virtual-machine)
 #--------------------------------------------------------------
 module "monitoring_vm" {
-  source = "./modules/compute/vm-monitoring"
+  source = "./terraform_modules/virtual-machine"
   count  = var.enable_monitoring_vm ? 1 : 0
 
   providers = {
     azurerm = azurerm.hub
   }
 
-  vm_name                = local.hub_vm_name
-  vm_size                = var.vm_size
-  location               = var.location
-  resource_group_name    = module.hub_vnet.resource_group_name
-  vnet_name              = module.hub_vnet.vnet_name
-  vnet_resource_group_name = module.hub_vnet.resource_group_name
-  subnet_name            = "Monitoring-VM-Subnet"
-  admin_username         = var.vm_admin_username
-  admin_password         = var.vm_admin_password
-  tags                   = var.tags
+  name                = local.hub_vm_name
+  os_type             = "linux"
+  size                = var.vm_size
+  location             = var.location
+  resource_group_name  = module.hub_vnet.resource_group_name
+  subnet_id            = module.hub_vnet.subnet_ids["Monitoring-VM-Subnet"]
+  admin_username       = var.vm_admin_username
+  admin_password       = var.vm_admin_password
+  tags                 = var.tags
+  enable_identity      = true
+  vm_extensions = [
+    { name = "AzureMonitorLinuxAgent", publisher = "Microsoft.Azure.Monitor", type = "AzureMonitorLinuxAgent", type_handler_version = "1.0", auto_upgrade_minor_version = true, settings = {}, protected_settings = {} },
+    { name = "enablevmAccess", publisher = "Microsoft.Azure.Security", type = "AzureDiskEncryptionForLinux", type_handler_version = "1.0", auto_upgrade_minor_version = true, settings = {}, protected_settings = {} }
+  ]
 
   depends_on = [module.hub_vnet]
 }
@@ -192,7 +217,7 @@ resource "azurerm_role_assignment" "vm_storage_reader" {
 # Spoke VNet Module
 #--------------------------------------------------------------
 module "spoke_vnet" {
-  source = "./modules/networking/spoke-vnet"
+  source = "./modules/dev/spoke/vnet"
 
   providers = {
     azurerm = azurerm.spoke
@@ -236,21 +261,24 @@ module "spoke_vnet" {
   # AI Foundry
   ai_foundry_name = local.spoke_ai_foundry_name
 
-  # Log Analytics
-  log_analytics_workspace_id = module.shared_services.log_analytics_workspace_id
+  # Log Analytics (공통 모듈 출력)
+  log_analytics_workspace_id = module.log_analytics_workspace.id
 
   # Hub Monitoring Storage (centralized logging)
   hub_monitoring_storage_ids = module.storage.monitoring_storage_account_ids
 
-  depends_on = [module.hub_vnet, module.shared_services, module.storage]
+  depends_on = [module.hub_vnet, module.log_analytics_workspace, module.storage]
 }
 
 #--------------------------------------------------------------
-# VNet Peering: Hub to Spoke
-# (Spoke to Hub peering is in the spoke module)
+# VNet Peering: Hub to Spoke (공통 모듈 vnet-peering)
 #--------------------------------------------------------------
-resource "azurerm_virtual_network_peering" "hub_to_spoke" {
-  provider = azurerm.hub
+module "vnet_peering_hub_to_spoke" {
+  source = "./terraform_modules/vnet-peering"
+
+  providers = {
+    azurerm = azurerm.hub
+  }
 
   name                         = "${module.hub_vnet.vnet_name}-to-spoke"
   resource_group_name          = module.hub_vnet.resource_group_name
