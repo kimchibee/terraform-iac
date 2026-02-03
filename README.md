@@ -13,33 +13,119 @@ Azure Hub/Spoke 인프라를 Terraform으로 배포할 때 `terraform plan` / `t
 | **IaC 전용 모듈** | `modules/` — **환경별**(예: `dev/`) 하위에 **Hub**(vnet, shared-services, monitoring-storage) / **Spoke**(vnet) 기준, 이 프로젝트 전용. |
 | **공통 모듈** | **[terraform-modules](https://github.com/kimchibee/terraform-modules)** 레포에서 관리. 이 레포(terraform-iac)에는 포함하지 않으며, `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=main"` 또는 `?ref=태그` 로만 참조. |
 
-다른 Azure 프로젝트가 생기면 **새 IaC(새 레포 또는 `environments/` 하위)** 를 만들고, **같은 공통 모듈(terraform-modules) 레포**를 참조해 같이 쓸 수 있습니다. → [docs/COMMON_MODULE_MIGRATION.md](docs/COMMON_MODULE_MIGRATION.md) §6 참고.
+다른 Azure 프로젝트가 생기면 **새 IaC(새 레포 또는 `environments/` 하위)** 를 만들고, **같은 공통 모듈(terraform-modules) 레포**를 참조해 같이 쓸 수 있습니다. → [공통 모듈 관리](#7-공통-모듈-관리) 섹션 참고.
 
 ---
 
 ## 빠른 시작
 
-1. **사전 요구**  
-   Terraform 1.5+, Azure CLI 로그인(`az login`), Hub/Spoke 구독 ID 확보.
+### 필수 사전 준비
 
-2. **클론**  
-   `git clone <이 레포 URL>` 후 `cd <레포 루트>`.
+1. **도구 설치**  
+   - Terraform 1.5+ 설치
+   - Azure CLI 설치 및 로그인: `az login`
+   - Hub/Spoke 구독 ID 확보
 
-3. **변수 파일**  
-   `cp terraform.tfvars.example terraform.tfvars` 후 구독 ID, 리전, 프로젝트명, 비밀 등 환경에 맞게 수정.  
-   (`terraform.tfvars` 는 .gitignore 대상 — 커밋하지 말 것.)
+2. **Azure 권한 확인**  
+   - Hub 구독: `Contributor` 또는 `Owner` 권한
+   - Spoke 구독: `Contributor` 또는 `Owner` 권한
+
+### 배포 단계
+
+1. **저장소 클론**  
+   ```bash
+   git clone https://github.com/kimchibee/terraform-iac.git
+   cd terraform-iac
+   ```
+
+2. **변수 파일 생성 및 필수 값 설정**  
+   ```bash
+   cp terraform.tfvars.example terraform.tfvars
+   ```
+   
+   **`terraform.tfvars` 파일에서 반드시 수정해야 할 필수 항목:**
+   
+   | 항목 | 설명 | 예시 |
+   |------|------|------|
+   | `hub_subscription_id` | Hub 구독 ID | `"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"` |
+   | `spoke_subscription_id` | Spoke 구독 ID | `"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"` |
+   | `location` | Azure 리전 | `"Korea Central"` 또는 `"East US"` |
+   | `project_name` | 프로젝트 이름 | `"myproject"` |
+   | `environment` | 환경 이름 | `"dev"`, `"prod"` 등 |
+   | `vm_admin_password` | Monitoring VM 비밀번호 | **강력한 비밀번호** (최소 12자, 대소문자/숫자/특수문자 포함) |
+   
+   **VPN Gateway 사용 시 추가 필수 항목:**
+   - `vpn_shared_key`: VPN 공유 키
+   - `local_gateway_configs`: 온프레미스 게이트웨이 IP 및 주소 공간
+   
+   **API Management 사용 시 추가 필수 항목:**
+   - `apim_publisher_name`: 발행자 이름
+   - `apim_publisher_email`: 발행자 이메일
+   
+   ⚠️ **주의**: `terraform.tfvars`는 `.gitignore` 대상이므로 Git에 커밋하지 마세요.
+
+3. **Backend(State) 설정 (선택사항)**  
+   원격 State 사용 시 `terraform.tf` 파일에서 다음 블록의 주석을 해제하고 값을 수정:
+   ```hcl
+   backend "azurerm" {
+     resource_group_name  = "terraform-state-rg"      # State 저장소 리소스 그룹
+     storage_account_name = "terraformstate"          # State 저장소 계정명
+     container_name       = "tfstate"                 # 컨테이너명
+     key                  = "terraform.tfstate"      # State 파일 키 (환경별로 분리 가능)
+   }
+   ```
+   
+   **Backend를 설정하지 않으면** 로컬에 `terraform.tfstate` 파일이 생성됩니다 (팀 협업 시 권장하지 않음).
 
 4. **초기화 및 배포**  
    ```bash
-   terraform init   # 공통 모듈은 terraform-modules 레포에서 자동 다운로드
+   # Terraform 초기화 (공통 모듈은 terraform-modules 레포에서 자동 다운로드)
+   terraform init
+   
+   # 배포 계획 확인 (필수 - 변경사항을 먼저 확인)
    terraform plan -var-file=terraform.tfvars
+   
+   # 배포 실행
    terraform apply -var-file=terraform.tfvars
    ```
-   환경별로 `dev.tfvars`, `prod.tfvars` 등을 쓰면:  
-   `terraform plan -var-file=prod.tfvars`
+   
+   **환경별 tfvars 파일 사용 시:**
+   ```bash
+   terraform plan -var-file=prod.tfvars
+   terraform apply -var-file=prod.tfvars
+   ```
 
-5. **Backend(State)**  
-   원격 State 사용 시 `terraform.tf` 에서 `backend "azurerm" { ... }` 주석 해제 후, 사용할 Storage 계정·컨테이너·key 로 수정.
+### 배포 전 체크리스트
+
+배포를 시작하기 전에 다음 항목을 확인하세요:
+
+- [ ] Terraform 1.5+ 설치 확인 (`terraform version`)
+- [ ] Azure CLI 로그인 확인 (`az account show`)
+- [ ] Hub/Spoke 구독 ID 확인 및 권한 확인
+- [ ] `terraform.tfvars` 파일 생성 및 필수 값 설정 완료
+  - [ ] `hub_subscription_id` 설정
+  - [ ] `spoke_subscription_id` 설정
+  - [ ] `location` 설정
+  - [ ] `project_name`, `environment` 설정
+  - [ ] `vm_admin_password` 설정 (강력한 비밀번호)
+- [ ] VPN Gateway 사용 시: `vpn_shared_key`, `local_gateway_configs` 설정
+- [ ] API Management 사용 시: `apim_publisher_name`, `apim_publisher_email` 설정
+- [ ] Backend 설정 (선택사항이지만 팀 협업 시 권장)
+
+### 예상 배포 시간
+
+- **전체 인프라 배포**: 약 30-60분 (리소스 종류와 개수에 따라 다름)
+- **주요 리소스**:
+  - Hub VNet: 약 5-10분
+  - VPN Gateway: 약 20-30분 (가장 오래 걸림)
+  - Spoke VNet 및 워크로드: 약 10-20분
+
+### 문제 해결
+
+배포 중 오류가 발생하면:
+1. `terraform plan` 출력 확인
+2. Azure Portal에서 리소스 생성 상태 확인
+3. [작업 절차](#10-작업-절차) 섹션의 "문제 해결" 참고
 
 ---
 
