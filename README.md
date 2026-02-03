@@ -43,13 +43,85 @@ Azure Hub/Spoke 인프라를 Terraform으로 배포할 때 `terraform plan` / `t
 
 ---
 
-## 문서 (상세 가이드)
+## 전체 아키텍처 개요
 
-| 문서 | 설명 |
-|------|------|
-| [docs/COMMON_MODULE_MIGRATION.md](docs/COMMON_MODULE_MIGRATION.md) | 공통 모듈 vs IaC 분리 설계, 루트 모듈은 IaC에서 관리, 다른 프로젝트 시 공통 모듈 공유 |
-| [docs/ROOT_TF_FILES.md](docs/ROOT_TF_FILES.md) | 루트 .tf 역할, 루트 vs 모듈 관계, 배포 흐름, 루트 .tf 관리 방법 |
-| [docs/HASHICORP_RECOMMENDED_PRACTICES.md](docs/HASHICORP_RECOMMENDED_PRACTICES.md) | HashiCorp 권장 사항 — 표준 모듈 구조, 원격 State, 비밀, 환경 분리, fmt/validate |
+### Hub-Spoke 네트워크 아키텍처
+
+이 인프라는 **Azure Hub-Spoke 네트워크 아키텍처**를 기반으로 구성되어 있습니다.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Hub Subscription                         │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Hub VNet (중앙 허브)                                 │   │
+│  │  ├── VPN Gateway (온프레미스 연결)                    │   │
+│  │  ├── DNS Private Resolver                             │   │
+│  │  ├── Private DNS Zones                                │   │
+│  │  ├── Key Vault                                        │   │
+│  │  ├── Monitoring VM                                    │   │
+│  │  └── Monitoring Storage Accounts                      │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Shared Services                                      │   │
+│  │  ├── Log Analytics Workspace                         │   │
+│  │  └── Security Insights                                │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          │ VNet Peering
+                          │
+┌─────────────────────────┴─────────────────────────────────┐
+│                  Spoke Subscription                       │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │  Spoke VNet (워크로드)                                │ │
+│  │  ├── API Management (Private)                         │ │
+│  │  ├── Azure OpenAI                                    │ │
+│  │  ├── AI Foundry                                     │ │
+│  │  └── Private Endpoints                               │ │
+│  └──────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────┘
+```
+
+### 모듈 의존성 관계
+
+```
+Hub VNet (최초 생성)
+    │
+    ├──→ Shared Services (Log Analytics 등)
+    │
+    ├──→ Storage (Key Vault, Monitoring Storage)
+    │
+    ├──→ Monitoring VM
+    │
+    └──→ Spoke VNet (VNet Peering)
+            │
+            └──→ Role Assignments (Hub VM → Spoke Resources)
+```
+
+### 주요 구성 요소
+
+#### Hub VNet
+- **역할**: 중앙 집중식 네트워크 허브
+- **리소스**: VPN Gateway, DNS Resolver, Private DNS Zones, Key Vault
+- **서브넷**: GatewaySubnet, DNSResolver-Inbound/Outbound, Monitoring-VM-Subnet, pep-snet 등
+
+#### Spoke VNet
+- **역할**: 워크로드 실행 환경
+- **리소스**: API Management, Azure OpenAI, AI Foundry
+- **서브넷**: apim-snet, pep-snet
+
+#### Shared Services
+- **역할**: 공유 모니터링 및 보안 서비스
+- **리소스**: Log Analytics Workspace, Security Insights
+
+#### Storage
+- **역할**: 중앙 집중식 스토리지 및 비밀 관리
+- **리소스**: Key Vault, Monitoring Storage Accounts
+
+#### Compute
+- **역할**: 가상 머신 관리
+- **리소스**: Monitoring VM, Linux/Windows VM 인스턴스
 
 ---
 
@@ -129,6 +201,11 @@ terraform-iac/                       # 이 레포 루트 (IaC 배포 루트)
 4. [리소스 삭제 (복사·붙여넣기용)](#4-리소스-삭제-복사붙여넣기용)
 5. [실행 순서 및 주의사항](#5-실행-순서-및-주의사항)
 6. [각 환경에 맞추어 수정 필요 항목](#6-각-환경에-맞추어-수정-필요-항목)
+7. [공통 모듈 관리](#7-공통-모듈-관리)
+8. [루트 파일 관리](#8-루트-파일-관리)
+9. [HashiCorp 권장 사항](#9-hashicorp-권장-사항)
+10. [작업 절차](#10-작업-절차)
+11. [배포된 인프라 정보](#11-배포된-인프라-정보)
 
 ---
 
@@ -562,3 +639,470 @@ terraform apply -var-file=terraform.tfvars        # 적용
 이 가이드는 **복사·붙여넣기로 리소스 생성/변경/삭제**가 가능하도록 작성되었습니다.  
 **공통 모듈 저장소**는 **`main.tf` 맨 위 주석("공통 모듈 저장소 지정")** 및 **각 module 블록의 `source` 인자**에 명시되어 있으며,  
 각 환경에 맞추어 수정할 때 위 **섹션 6** 항목을 수정하면 됩니다.
+
+---
+
+## 7. 공통 모듈 관리
+
+### 공통 모듈 vs IaC 분리 설계
+
+**목표**: 공통 모듈(terraform-modules)과 IaC(terraform-iac) 두 가지만으로 관리.  
+IaC 루트는 **공통 모듈만 호출**하고, 환경 전용/복합 리소스는 IaC 쪽에만 둡니다.
+
+### 공통 모듈로 옮길 수 있는 것 vs IaC에만 둘 것
+
+#### 이미 공통 모듈(terraform-modules)에 있는 것
+
+| 공통 모듈 | 역할 | IaC에서 사용 예 |
+|-----------|------|-----------------|
+| **resource-group** | RG 1개 | Hub RG, Spoke RG |
+| **vnet** | VNet + 서브넷 | Hub VNet, Spoke VNet |
+| **storage-account** | Storage Account 1개 | 로그용 스토리지 여러 개 |
+| **key-vault** | Key Vault 1개 | Hub KV, Spoke KV |
+| **private-endpoint** | PE 1개 + DNS 연결 | Storage/KV/OpenAI 등 PE |
+
+#### 공통 모듈로 추가하면 좋은 것 (단일 책임)
+
+| 현재 위치 | 공통 모듈 후보 | 역할 | 비고 |
+|-----------|----------------|------|------|
+| monitoring/log-analytics | **log-analytics-workspace** | Workspace 1개만 | Solutions/AG/Dashboard는 IaC 또는 별도 모듈 |
+| hub-vnet, spoke-vnet 내 NSG | **nsg** | NSG 1개 + 규칙 | 서브넷마다 반복 |
+| hub-vnet 등 diagnostic-settings | **diagnostic-settings** | 리소스 1개당 진단 설정 1건 | VNet/Storage/KV 등 공통 |
+| spoke-vnet/vnet-peering, 루트 Peering | **vnet-peering** | 한 방향 Peering 1개 | Hub↔Spoke |
+| hub-vnet/private-dns-zones | **private-dns-zone** | Zone 1개 + (선택) VNet Link | Zone 13개 등 반복 |
+| compute/vm-monitoring, virtual-machine | **virtual-machine** | Linux/Windows VM 1대 | Monitoring VM 등 |
+
+#### IaC에만 두는 것 (공통 모듈로 안 옮기는 것)
+
+환경/구성에 따라 달라지거나, 한 번에 여러 리소스를 묶는 **조합**에 가까운 것들입니다.
+
+| 리소스/기능 | 이유 |
+|-------------|------|
+| **VPN Gateway** | Hub 1개, 로컬 게이트웨이/연결 설정 등 환경별 차이 큼 |
+| **DNS Private Resolver** | Hub 1개, 인바운드/아웃바운드·ruleset 등 설정 복잡 |
+| **API Management** | SKU·VNet·정책 조합이 환경별로 다름 |
+| **Azure OpenAI** | 배포/모델 설정이 환경·비즈니스마다 다름 |
+| **AI Foundry (ML Workspace 등)** | 워크스페이스·스토리지·ACR 조합, 환경 전용 |
+| **Log Analytics Solutions / Action Group / Dashboard** | 모니터링/비즈니스 설정, 환경당 1세트에 가까움 |
+
+### 루트 모듈은 IaC 레포에서, 공통 모듈은 프로젝트 간 공유
+
+- **루트 모듈**(main.tf, variables.tf, outputs.tf, provider.tf, terraform.tf, locals.tf, data.tf)은 **배포의 진입점**이므로 **IaC 레포(terraform-iac)** 에서 관리하는 것이 맞습니다.
+- **나중에 다른 Azure 프로젝트가 생기면**:
+  - **새 프로젝트용 IaC**를 만듭니다.  
+    → 새 레포(예: `terraform-iac-project-b`) 또는 같은 IaC 레포 안에 **새 루트**(예: `environments/project-b/`)를 두는 방식.
+  - 그 **새 IaC 루트**에서 **같은 공통 모듈(terraform-modules) 레포**를 참조합니다.  
+    → `source = "git::https://github.com/.../terraform-modules.git//terraform_modules/xxx?ref=v1.0.0"` 형태로 그대로 사용.
+
+이렇게 하면:
+- **공통 모듈**을 한 레포에서만 관리하므로, 버그 수정·개선을 반영하면 **그 공통 모듈을 쓰는 모든 Azure 프로젝트**에서 동일한 품질을 유지할 수 있습니다.
+- **프로젝트별 차이**(구독, 네이밍, 기능 on/off)는 **각 IaC 루트의 variables·locals·모듈 호출 인자**에서만 다르게 두면 됩니다.
+
+---
+
+## 8. 루트 파일 관리
+
+### 루트 vs IaC 모듈 — 누가 누구에 종속?
+
+**루트 .tf가 IaC 모듈에 종속되는 것이 아닙니다.** 반대입니다.
+
+- **루트** = `terraform apply`의 **진입점(주체)**.  
+  루트의 **main.tf**가 **공통 모듈**과 **IaC 모듈**을 **호출**합니다.
+- **공통 모듈 / IaC 모듈** = 루트에 **의해 호출되는** 쪽.  
+  즉, **모듈들이 루트에 종속**됩니다 (루트가 없으면 호출될 수 없음).
+
+### Terraform 배포 시 흐름
+
+1. **루트**에서 `terraform plan` / `apply` 실행.
+2. **루트 main.tf**가 **공통 모듈**과 **IaC 모듈**을 호출할 때,  
+   **variables.tf / locals.tf**에 정의된 값(리소스 그룹명, VNet명, 주소 공간, 태그 등)을 **인자로 넘깁니다.**
+3. 각 모듈은 그 인자에 맞춰 **Azure 리소스**를 생성/갱신합니다.  
+   → 루트에 명시된 **리소스 그룹명, VNet명 등**에 맞춰 **특정 Azure 인프라(구독·리전)** 에 **Azure 서비스**가 배포됩니다.
+4. **provider.tf**의 구독 ID(Hub/Spoke)와 **terraform.tf**의 Backend 설정에 따라, **어느 구독·어디에 상태를 저장할지**가 정해집니다.
+
+### 루트 .tf 파일은 보통 어떻게 관리하나?
+
+#### 1. 버전 관리 (Git)
+
+- **루트 .tf 전체**를 Git 저장소(예: terraform-iac 레포)에 둡니다.
+- **main.tf, variables.tf, outputs.tf, provider.tf, terraform.tf, locals.tf, data.tf** 는 모두 커밋 대상.
+- 변경 이력·리뷰·롤백을 위해 **브랜치 전략**(main + feature 브랜치 등)을 정합니다.
+
+#### 2. 환경별 값 분리 — tfvars
+
+- **variables.tf** 에는 변수 **정의**만 두고, **실제 값**은 **tfvars** 로 분리합니다.
+- **terraform.tfvars** 는 예시만 커밋하고(terraform.tfvars.example), **실제 값이 들어간 terraform.tfvars** 는 **.gitignore** 에 넣어 Git에 올리지 않습니다.
+- 환경별로 파일을 나누면:
+  - `dev.tfvars`, `staging.tfvars`, `prod.tfvars` 등
+  - 실행 시: `terraform plan -var-file=prod.tfvars`
+- 비밀(구독 ID, 비밀번호 등)은 tfvars 대신 **환경 변수**(`TF_VAR_xxx`) 또는 **Azure Key Vault 등**에서 주입하는 방식을 많이 씁니다.
+
+#### 3. State(상태) 관리 — Backend
+
+- **terraform.tf** 에 **backend "azurerm"** 또는 **backend "s3"** 등을 설정해, **state 파일**을 **원격 스토리지**에 저장합니다.
+- 팀원이 같은 state를 보도록 하고, **state 잠금**으로 동시 apply 충돌을 막습니다.
+- 환경/구독마다 **backend key** 를 다르게 두면(예: `key = "prod/terraform.tfstate"`) 환경별 state 분리가 됩니다.
+
+| 대상 | 권장 저장소 | 버전 관리 |
+|------|-------------|-----------|
+| **State** | S3 / Azure Blob / GCS (backend) | ✅ 버킷 버전 관리 권장 (state 복구용) |
+| **루트 .tf 코드** | **Git** (GitHub 등) | ✅ Git으로 버전 관리. S3는 백업/아카이브용으로만 선택적 사용 |
+
+#### 4. 환경별 루트를 나누는 방법 (선택)
+
+- **한 루트에 tfvars만 바꿔 쓰는 방식**  
+  - 루트 .tf는 한 세트. `-var-file=dev.tfvars` / `prod.tfvars` 로 구분.
+- **환경마다 디렉터리를 두는 방식**  
+  - 예: `environments/dev/`, `environments/prod/`  
+  - 각 디렉터리에 **자기 환경용** main.tf, variables.tf, provider.tf, terraform.tf, tfvars 를 두고, 공통 모듈은 `source = "../../modules/..."` 또는 git으로 참조.
+
+### 루트에 꼭 있어야 하는 파일 (옮기면 안 됨)
+
+| 파일 | 역할 | 공통/IaC로 옮기기 |
+|------|------|-------------------|
+| **main.tf** | 모듈 호출 + 루트 리소스. `terraform apply`의 진입점. | **안 옮김.** 대신 *안의 리소스*를 IaC 모듈로 뺄 수 있음. |
+| **variables.tf** | 루트 입력 (tfvars와 연결). | **안 옮김.** 환경별 값은 루트에서만 받음. |
+| **outputs.tf** | 루트 출력 (배포 결과 노출). | **안 옮김.** |
+| **provider.tf** | Azure Provider, Hub/Spoke 구독, alias. | **안 옮김.** Terraform 규약상 루트에 둠. |
+| **terraform.tf** | Backend, required_providers, 버전. | **안 옮김.** |
+
+→ 위 파일들은 **"공통 모듈"이나 "IaC 모듈"로 옮기는 대상이 아니라**,  
+  **공통 모듈 / IaC 모듈을 "호출하는 쪽"**입니다.
+
+---
+
+## 9. HashiCorp 권장 사항
+
+### 1. 표준 모듈 구조 (Standard Module Structure)
+
+- **루트 모듈(Root module)**  
+  - 저장소 **루트**에 있는 .tf 파일이 **진입점**.  
+  - 반드시 필요.
+- **권장 파일명**
+  - `main.tf` — 주 진입점(리소스·모듈 호출)
+  - `variables.tf` — 입력 변수
+  - `outputs.tf` — 출력
+- **모듈용**
+  - 재사용 모듈은 `modules/` 하위에 두거나, 별도 레포로 분리.
+  - 각 모듈에도 `README.md`, 필요 시 `LICENSE` 권장.
+- **변수·출력**
+  - 모든 variable/output에 **description** 한두 문장 권장.
+
+### 2. 버전 관리 + 코드 리뷰
+
+- **모든 Terraform 코드를 VCS(Git 등)에** 넣기.
+- **Pull Request(코드 리뷰)** 후 머지.
+- **수동 변경 최소화** — 변경은 코드로 하고, apply는 파이프라인 또는 통제된 절차로.
+
+### 3. 원격 State + 잠금 (Remote State with Locking)
+
+- **State는 원격 Backend**에 저장 (로컬 기본값 사용 지양).
+- **State locking**으로 동시 apply 충돌 방지.
+- 지원 Backend 예: **azurerm**, **s3**, **gcs**, **remote**(HCP Terraform) 등.
+
+```hcl
+# terraform.tf 예시
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "terraform-state-rg"
+    storage_account_name = "terraformstate"
+    container_name       = "tfstate"
+    key                  = "terraform.tfstate"   # 환경별로 key 분리 가능 (예: prod/terraform.tfstate)
+  }
+}
+```
+
+### 4. 비밀/민감 데이터 관리
+
+- **variable**에 비밀/민감 값이면 `sensitive = true` 지정.
+- **실제 비밀 값**은 tfvars 파일에 넣지 말고, **환경 변수**(`TF_VAR_xxx`) 또는 **HCP Terraform / Vault** 등에서 주입.
+- **State**에 민감 정보가 들어가지 않도록, 가능하면 **ephemeral** 값 사용(Terraform 1.10+).
+
+### 5. 환경 분리 — Workspace vs 디렉터리
+
+- **Workspace**
+  - **같은 코드**로 **여러 state**만 나누고 싶을 때 사용.
+  - `${terraform.workspace}` 로 이름만 구분.
+  - **서로 다른 구독/권한/설정**이 크게 다르면 부적합.
+- **환경별로 설정이 크게 다를 때**
+  - **환경마다 디렉터리** (`environments/dev/`, `environments/prod/`)를 두고,  
+    각 디렉터리에 루트 .tf + 해당 환경용 tfvars/backend key를 두는 방식을 권장.
+
+### 6. 코드 스타일 및 검증
+
+- **`terraform fmt`** — 커밋 전 포맷 통일.
+- **`terraform validate`** — 문법/구성 검증.
+- **리소스 이름** — 타입 이름 제외, 명사 사용, 단어 구분은 언더스코어(`_`).
+- **들여쓰기** — 2칸 스페이스.
+
+### 체크리스트 — 지금 프로젝트에 적용할 수 있는 것
+
+| 항목 | HashiCorp 권장 | 적용 방법 (terraform-iac) |
+|------|----------------|------------------------------|
+| **루트 구조** | main.tf, variables.tf, outputs.tf 등 루트에 진입점 유지 | ✅ 이미 루트 .tf로 구성됨 |
+| **모듈 구조** | modules/ 또는 별도 레포, README·description | ✅ 공통 모듈은 terraform-modules 레포, IaC 모듈은 `modules/`. description 보강 권장 |
+| **버전 관리** | 전체 코드 Git, PR 리뷰 | ✅ Git 사용. PR 워크플로우 적용 권장 |
+| **원격 State** | backend로 원격 저장 + 잠금 | ⬜ `terraform.tf`에서 backend "azurerm" (또는 사용 Backend) 설정 |
+| **비밀** | sensitive = true, tfvars 미커밋, TF_VAR 또는 시크릿 저장소 | ⬜ 비밀 변수에 sensitive 추가, tfvars는 .gitignore |
+| **환경 분리** | Workspace 또는 environments/ 디렉터리 | ⬜ tfvars로 분리 중이면 유지. 필요 시 environments/dev\|prod 도입 |
+| **스타일/검증** | fmt, validate | ⬜ CI 또는 pre-commit에 `terraform fmt -recursive`, `terraform validate` 추가 |
+
+---
+
+## 10. 작업 절차
+
+### 사전 준비사항
+
+#### 1. 필수 도구 설치
+
+- **Azure CLI**: [설치 가이드](https://docs.microsoft.com/cli/azure/install-azure-cli)
+- **Terraform**: 버전 **~> 1.5** 이상
+  - 확인: `terraform version`
+
+#### 2. Azure 인증
+
+```bash
+# Azure에 로그인
+az login
+
+# 현재 로그인된 계정 확인
+az account show
+
+# 필요한 구독으로 전환
+az account set --subscription "<subscription-id>"
+```
+
+#### 3. 권한 확인
+
+- **Subscription 레벨**: `Contributor` 또는 `Owner` 권한
+- **Resource Group 레벨**: 리소스 생성/수정/삭제 권한
+
+#### 4. 설정 파일 확인
+
+`terraform.tfvars` 파일에 실제 환경 값이 설정되어 있는지 확인:
+
+```hcl
+hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+### 기본 작업 흐름
+
+#### 1. Terraform 초기화
+
+```bash
+terraform init
+```
+
+#### 2. 실행 계획 확인
+
+```bash
+terraform plan
+```
+
+#### 3. 변경사항 적용
+
+```bash
+terraform apply
+
+# 자동 승인 (주의: 확인 없이 적용됨)
+terraform apply -auto-approve
+```
+
+#### 4. 특정 리소스만 적용
+
+```bash
+# 특정 모듈만 적용
+terraform apply -target=module.vm_linux_01
+
+# 특정 리소스만 적용
+terraform apply -target=module.hub_vnet.azurerm_virtual_network.hub
+```
+
+### State 관리
+
+#### State 확인
+
+```bash
+# State 목록 확인
+terraform state list
+
+# 특정 리소스 State 확인
+terraform state show module.vm_linux_01.module.vm.azurerm_linux_virtual_machine.this[0]
+
+# State 출력
+terraform output
+```
+
+#### State 제거 (리소스는 유지)
+
+```bash
+terraform state rm <resource-address>
+```
+
+#### State 백업
+
+```bash
+cp terraform.tfstate terraform.tfstate.backup
+```
+
+### 문제 해결
+
+#### 1. Azure 인증 오류
+
+```bash
+az login
+az account show
+```
+
+#### 2. Provider 초기화 오류
+
+```bash
+terraform init -upgrade
+```
+
+#### 3. State 파일 오류
+
+```bash
+# State 파일 존재 확인
+ls -la terraform.tfstate
+
+# State 파일 복원
+cp terraform.tfstate.backup terraform.tfstate
+```
+
+#### 4. 의존성 오류
+
+```bash
+# 의존성 그래프 확인
+terraform graph | dot -Tsvg > graph.svg
+```
+
+### 체크리스트
+
+#### 작업 전 확인사항
+
+- [ ] Azure CLI 설치 및 로그인 완료
+- [ ] Terraform 버전 확인 (~> 1.5)
+- [ ] `terraform.tfvars` 파일 확인/수정
+  - [ ] `hub_subscription_id` 설정 확인
+  - [ ] `spoke_subscription_id` 설정 확인
+- [ ] Azure 권한 확인 (Subscription Contributor 이상)
+- [ ] `terraform.tfstate` 파일 존재 확인
+- [ ] `terraform init` 실행 완료
+
+#### 리소스 추가 전 확인사항
+
+- [ ] 모듈 디렉터리 구조 확인
+- [ ] 변수 정의 완료 (`variables.tf`)
+- [ ] 출력 값 정의 완료 (`outputs.tf`)
+- [ ] 루트 `main.tf`에 모듈 호출 추가
+- [ ] 의존성 관계 확인 (`depends_on`)
+
+#### 리소스 삭제 전 확인사항
+
+- [ ] 다른 모듈에서 참조하는지 확인
+- [ ] State에서 제거할 리소스 주소 확인
+- [ ] 실제 리소스 삭제 여부 결정
+- [ ] 백업 완료
+
+---
+
+## 11. 배포된 인프라 정보
+
+### 인프라 일치도: ✅ **완벽히 일치**
+
+배포된 Azure 인프라와 Terraform 구조가 완벽히 일치합니다.
+
+### 전체 리소스 통계
+
+| 항목 | 배포된 인프라 | Terraform 구조 | 일치 여부 |
+|------|-------------|---------------|----------|
+| 총 모듈 | 5개 | 5개 | ✅ |
+| 총 리소스 그룹 | 2개 | 2개 | ✅ |
+| 총 Virtual Networks | 2개 | 2개 | ✅ |
+| 총 서브넷 | 10개 | 10개 | ✅ |
+| 총 Private DNS Zones | 13개 | 13개 | ✅ |
+| 총 Storage Accounts | 13개 | 13개 | ✅ |
+| 총 Private Endpoints | 17개 | 17개 | ✅ |
+| 총 Key Vaults | 3개 | 3개 | ✅ |
+| 총 Virtual Machines | 1개 | 1개 | ✅ |
+
+### Hub 리소스 그룹 (`test-x-x-rg`)
+
+| 리소스 타입 | 배포됨 | Terraform | 일치 여부 |
+|------------|--------|-----------|----------|
+| Virtual Networks | 1 | ✅ | ✅ |
+| Subnets | 8 | ✅ | ✅ |
+| VPN Gateway | 1 | ✅ | ✅ |
+| DNS Resolver | 1 | ✅ | ✅ |
+| Private DNS Zones | 13 | ✅ | ✅ |
+| NSG | 2 | ✅ | ✅ |
+| Log Analytics Workspace | 1 | ✅ | ✅ |
+| Solutions | 2 | ✅ | ✅ |
+| Action Group | 1 | ✅ | ✅ |
+| Dashboard | 1 | ✅ | ✅ |
+| Key Vault | 1 | ✅ | ✅ |
+| Storage Accounts | 11 | ✅ | ✅ |
+| Private Endpoints | 12 | ✅ | ✅ |
+| Virtual Machine | 1 | ✅ | ✅ |
+| Network Interface | 1 | ✅ | ✅ |
+| VM Extensions | 2 | ✅ | ✅ |
+| VNet Peering | 1 | ✅ | ✅ |
+| Role Assignments | 4 | ✅ | ✅ |
+
+**총 리소스 수**: 약 111개 (배포됨) = 약 111개 (Terraform) ✅
+
+### Spoke 리소스 그룹 (`test-x-x-spoke-rg`)
+
+| 리소스 타입 | 배포됨 | Terraform | 일치 여부 |
+|------------|--------|-----------|----------|
+| Virtual Networks | 1 | ✅ | ✅ |
+| Subnets | 2 | ✅ | ✅ |
+| NSG | 2 | ✅ | ✅ |
+| API Management | 1 | ✅ | ✅ |
+| Azure OpenAI | 1 | ✅ | ✅ |
+| AI Foundry Workspace | 1 | ✅ | ✅ |
+| Storage Accounts | 2 | ✅ | ✅ |
+| Container Registries | 2 | ✅ | ✅ |
+| Key Vaults | 2 | ✅ | ✅ |
+| Application Insights | 2 | ✅ | ✅ |
+| Private Endpoints | 5 | ✅ | ✅ |
+| VNet Peering | 1 | ✅ | ✅ |
+| Role Assignments | 5 | ✅ | ✅ |
+
+**총 리소스 수**: 약 24개 (배포됨) = 약 24개 (Terraform) ✅
+
+### 주요 특징
+
+#### 1. 모듈화된 구조
+- 각 기능별로 모듈 분리
+- 재사용 가능한 구조
+- 명확한 의존성 관리
+
+#### 2. 중앙 집중식 모니터링
+- 모든 리소스의 로그가 Hub의 중앙 Storage Account로 수집
+- Log Analytics Workspace를 통한 통합 분석
+- Monitoring VM을 통한 중앙 집중식 로그 수집
+
+#### 3. Private Endpoint 전략
+- 모든 주요 서비스는 Private Endpoint를 통해 접근
+- Public 인터넷 노출 최소화
+- 네트워크 격리 및 보안 강화
+
+#### 4. Hub-Spoke 아키텍처
+- Hub: 중앙 집중식 네트워크 및 보안 서비스
+- Spoke: 워크로드 실행 환경
+- VNet Peering을 통한 안전한 연결
+
+#### 5. 보안 강화
+- NSG를 통한 네트워크 트래픽 제어
+- Managed Identity를 통한 서비스 간 인증
+- Role-Based Access Control (RBAC) 적용
+
+---
+
+**마지막 업데이트**: 2026-01-23  
+**환경**: test  
+**위치**: Korea Central  
+**Terraform 버전**: ~> 1.5
