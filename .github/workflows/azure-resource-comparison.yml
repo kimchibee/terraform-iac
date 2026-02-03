@@ -1,0 +1,228 @@
+# ------------------------------------------------------------------------------
+# Azure 리소스 비교: Terraform 코드 vs 실제 Azure
+# - Terraform validate, init, (선택) plan / state list
+# - (선택) Azure 구독 리소스 목록 수집
+# - 비교 요약 리포트 생성 후 artifact 업로드
+# ------------------------------------------------------------------------------
+#
+# [필요 시크릿] Repo Settings → Secrets and variables → Actions
+#   HUB_SUBSCRIPTION_ID     : Hub 구독 ID (plan / Azure 리스트 시 사용)
+#   SPOKE_SUBSCRIPTION_ID   : Spoke 구독 ID (plan / Azure 리스트 시 사용)
+#   ARM_CLIENT_ID           : (state list 시) Terraform backend/provider 인증용
+#   ARM_CLIENT_SECRET       : (state list 시) 위 Client 의 Secret
+#   ARM_TENANT_ID           : (state list 시) Azure AD Tenant ID
+#   AZURE_CLIENT_ID         : (Azure 리소스 목록 수집 시) OIDC용 App Registration Client ID
+#   AZURE_TENANT_ID         : (Azure 리소스 목록 수집 시) Tenant ID
+#
+# [옵션] "Run az resource list" 로 실제 구독 리소스 목록 수집 시,
+#   Azure 에 Federated credential (GitHub OIDC) 설정 필요.
+# ------------------------------------------------------------------------------
+name: Azure Resource Comparison
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_terraform_plan:
+        description: 'Run terraform plan (needs hub/spoke subscription IDs)'
+        required: false
+        default: false
+        type: boolean
+      run_azure_list:
+        description: 'Run az resource list (needs Azure login)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - '**.tf'
+      - 'modules/**'
+      - '.github/workflows/azure-resource-comparison.yml'
+  schedule:
+    # 매주 월요일 09:00 KST (00:00 UTC)
+    - cron: '0 0 * * 1'
+
+env:
+  TF_VERSION: '1.5'
+  TF_INPUT: false
+  TF_IN_AUTOMATION: true
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+      state_list: ${{ steps.state_list.outputs.content }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init (no backend)
+        id: init
+        run: |
+          terraform init -backend=false
+        continue-on-error: true
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+        continue-on-error: true
+
+      # plan 실행 시 variables.tf 의 구독 ID 필요 → 시크릿에 HUB/SPOKE 구독 ID 넣기
+      - name: Terraform Plan (optional)
+        id: plan
+        if: ${{ github.event.inputs.run_terraform_plan == 'true' || (github.event_name == 'schedule' && vars.TF_VAR_HUB_SUBSCRIPTION_ID != '') }}
+        env:
+          TF_VAR_hub_subscription_id: ${{ secrets.HUB_SUBSCRIPTION_ID }}    # 넣을 값: Hub 구독 ID
+          TF_VAR_spoke_subscription_id: ${{ secrets.SPOKE_SUBSCRIPTION_ID }} # 넣을 값: Spoke 구독 ID
+        run: |
+          terraform plan -no-color -out=tfplan -input=false 2>&1 | tee plan-output.txt || true
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      # backend "azurerm" 사용 시 state list 위해 ARM_* 시크릿 필요
+      - name: Terraform State List (optional)
+        id: state_list
+        if: ${{ github.event.inputs.run_terraform_plan != 'true' && (secrets.TF_STATE_SAS_TOKEN != '' || secrets.AZURE_STORAGE_ACCESS_KEY != '') }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}           # 넣을 값: Backend Storage 접근 가능한 서비스 프린시펄 Client ID
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}   # 넣을 값: Client Secret
+          ARM_SUBSCRIPTION_ID: ${{ secrets.HUB_SUBSCRIPTION_ID }} # 넣을 값: Backend Storage 가 있는 구독 ID
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}           # 넣을 값: Tenant ID
+        run: |
+          terraform init 2>&1 || true
+          terraform state list 2>&1 | tee state-list.txt || true
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          cat state-list.txt 2>/dev/null >> $GITHUB_OUTPUT || true
+          echo "EOF" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Upload Terraform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: |
+            plan-output.txt
+            state-list.txt
+            tfplan
+          if-no-files-found: ignore
+
+  azure-resources:
+    name: Azure resource list
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    if: ${{ github.event.inputs.run_azure_list == 'true' }}
+    outputs:
+      hub_list: ${{ steps.list_hub.outputs.path }}
+      spoke_list: ${{ steps.list_spoke.outputs.path }}
+    steps:
+      # "Run az resource list" 선택 시 필요. Azure App Registration + Federated credential (GitHub) 설정
+      - name: Azure Login (OIDC)
+        id: azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}         # 넣을 값: OIDC용 App Registration (Application) ID
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}       # 넣을 값: Azure AD Tenant ID
+          subscription-id: ${{ secrets.HUB_SUBSCRIPTION_ID }} # 넣을 값: az account set 할 기본 구독 (Hub)
+        continue-on-error: true
+
+      - name: List Hub subscription resources
+        id: list_hub
+        if: steps.azure.outcome == 'success'
+        run: |
+          mkdir -p _azure_lists
+          # HUB_SUBSCRIPTION_ID 시크릿에 넣은 Hub 구독 ID 로 리소스 목록 수집
+          az account set --subscription "${{ secrets.HUB_SUBSCRIPTION_ID }}"
+          az resource list --query "[].{type:type, name:name, resourceGroup:resourceGroup}" --output table > _azure_lists/hub-resources.txt 2>/dev/null || true
+          az resource list --output json > _azure_lists/hub-resources.json 2>/dev/null || true
+          echo "path=_azure_lists/hub-resources.txt" >> $GITHUB_OUTPUT
+
+      - name: List Spoke subscription resources
+        id: list_spoke
+        if: steps.azure.outcome == 'success' && secrets.SPOKE_SUBSCRIPTION_ID != ''
+        run: |
+          # SPOKE_SUBSCRIPTION_ID 시크릿에 넣은 Spoke 구독 ID
+          az account set --subscription "${{ secrets.SPOKE_SUBSCRIPTION_ID }}"
+          az resource list --query "[].{type:type, name:name, resourceGroup:resourceGroup}" --output table > _azure_lists/spoke-resources.txt 2>/dev/null || true
+          az resource list --output json > _azure_lists/spoke-resources.json 2>/dev/null || true
+          echo "path=_azure_lists/spoke-resources.txt" >> $GITHUB_OUTPUT
+
+      - name: Upload Azure resource lists
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-resource-lists
+          path: _azure_lists/
+          if-no-files-found: ignore
+
+  report:
+    name: Comparison report
+    runs-on: ubuntu-latest
+    needs: [terraform, azure-resources]
+    if: always() && (needs.terraform.result == 'success' || needs.terraform.result == 'failure') && (needs.azure-resources.result == 'success' || needs.azure-resources.result == 'skipped' || needs.azure-resources.result == 'failure')
+    steps:
+      - name: Download Terraform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-outputs
+        continue-on-error: true
+
+      - name: Download Azure artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: azure-resource-lists
+        continue-on-error: true
+
+      - name: Generate comparison report
+        run: |
+          REPORT="COMPARISON_REPORT.md"
+          echo "# Azure 리소스 비교 리포트" > "$REPORT"
+          echo "" >> "$REPORT"
+          echo "**Run:** ${{ github.run_id }} | **Branch:** ${{ github.ref_name }} | **Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$REPORT"
+          echo "" >> "$REPORT"
+          echo "## 1. Terraform" >> "$REPORT"
+          if [ -f plan-output.txt ]; then
+            echo "### Plan output (excerpt)" >> "$REPORT"
+            echo '```' >> "$REPORT"
+            head -100 plan-output.txt >> "$REPORT" 2>/dev/null || true
+            echo '```' >> "$REPORT"
+          fi
+          if [ -f state-list.txt ]; then
+            echo "### State list (managed resources)" >> "$REPORT"
+            echo '```' >> "$REPORT"
+            cat state-list.txt >> "$REPORT" 2>/dev/null || true
+            echo '```' >> "$REPORT"
+          fi
+          if [ ! -f plan-output.txt ] && [ ! -f state-list.txt ]; then
+            echo "No plan or state list in this run. Run with options or configure backend/secrets." >> "$REPORT"
+          fi
+          echo "" >> "$REPORT"
+          echo "## 2. Azure (actual resources)" >> "$REPORT"
+          for f in _azure_lists/hub-resources.txt _azure_lists/spoke-resources.txt; do
+            if [ -f "$f" ]; then
+              echo "### $f" >> "$REPORT"
+              echo '```' >> "$REPORT"
+              head -80 "$f" >> "$REPORT" 2>/dev/null || true
+              echo '```' >> "$REPORT"
+            fi
+          done
+          if [ ! -f _azure_lists/hub-resources.txt ] && [ ! -f _azure_lists/spoke-resources.txt ]; then
+            echo "No Azure resource list in this run. Enable 'Run az resource list' and set Azure credentials." >> "$REPORT"
+          fi
+          echo "" >> "$REPORT"
+          echo "## 3. How to compare" >> "$REPORT"
+          echo "See [docs/AZURE_RESOURCE_COMPARISON.md](docs/AZURE_RESOURCE_COMPARISON.md) for full guide." >> "$REPORT"
+          cat "$REPORT"
+
+      - name: Upload comparison report
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-report
+          path: COMPARISON_REPORT.md

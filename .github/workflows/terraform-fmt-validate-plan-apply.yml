@@ -1,0 +1,201 @@
+# ------------------------------------------------------------------------------
+# Terraform: fmt → validate → plan → apply
+# 실패 시 로그·plan 파일을 artifact로 업로드해 디버깅 가능
+# ------------------------------------------------------------------------------
+#
+# [필요 시크릿] Repo Settings → Secrets and variables → Actions 에서 설정
+#   HUB_SUBSCRIPTION_ID     : Hub 구독 ID (예: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+#   SPOKE_SUBSCRIPTION_ID   : Spoke 구독 ID (예: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+#   ARM_CLIENT_ID           : Azure 서비스 프린시펄(또는 앱 등록) Application (client) ID
+#   ARM_CLIENT_SECRET       : 해당 서비스 프린시펄의 Client secret 값
+#   ARM_TENANT_ID           : Azure AD Tenant ID (디렉터리 ID)
+#   AZURE_CLIENT_ID         : (선택) OIDC/azure login용 Client ID (ARM_* 와 동일해도 됨)
+#   AZURE_TENANT_ID         : (선택) OIDC용 Tenant ID
+#
+# [Backend] terraform.tf 에서 backend "azurerm" 사용 시, 위 ARM_* 로 Storage 접근 가능한
+#   서비스 프린시펄이어야 함. Backend 미사용 시 init 은 로컬 백엔드로 동작.
+# ------------------------------------------------------------------------------
+name: Terraform fmt / validate / plan / apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_apply:
+        description: 'Run terraform apply (default: plan only)'
+        required: false
+        default: false
+        type: boolean
+      environment:
+        description: 'Environment (dev, prod)'
+        required: false
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+  push:
+    branches: [main]
+    paths:
+      - '**.tf'
+      - 'modules/**'
+      - '.github/workflows/terraform-fmt-validate-plan-apply.yml'
+
+env:
+  TF_VERSION: '1.5'
+  TF_INPUT: false
+  TF_IN_AUTOMATION: true
+  LOG_DIR: _tf_logs
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    # Terraform Azure Provider / Backend 인증 및 변수 (위 시크릿 참고)
+    env:
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}           # 넣을 값: 서비스 프린시펄 Client ID
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}   # 넣을 값: Client Secret
+      ARM_SUBSCRIPTION_ID: ${{ secrets.HUB_SUBSCRIPTION_ID }}  # 넣을 값: Hub 구독 ID
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}          # 넣을 값: Tenant ID
+      TF_VAR_hub_subscription_id: ${{ secrets.HUB_SUBSCRIPTION_ID }}    # variables.tf hub_subscription_id
+      TF_VAR_spoke_subscription_id: ${{ secrets.SPOKE_SUBSCRIPTION_ID }} # variables.tf spoke_subscription_id
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare log directory
+        run: mkdir -p "${{ env.LOG_DIR }}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      # (선택) Azure CLI 로그인. OIDC 사용 시 App Registration 에 Federated credential 설정 필요
+      - name: Azure Login (Terraform Azure Provider)
+        id: azure_login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}         # 넣을 값: ARM_CLIENT_ID 와 동일 또는 OIDC용 앱 ID
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}         # 넣을 값: ARM_TENANT_ID 와 동일
+          subscription-id: ${{ secrets.HUB_SUBSCRIPTION_ID }} # 넣을 값: Hub 구독 ID
+        continue-on-error: true
+
+      # --- 1. terraform fmt ---
+      - name: Terraform fmt
+        id: fmt
+        shell: bash
+        run: |
+          echo "=== terraform fmt -recursive ===" | tee "${{ env.LOG_DIR }}/fmt.log"
+          terraform fmt -recursive -diff 2>&1 | tee -a "${{ env.LOG_DIR }}/fmt.log"
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Terraform fmt check (fail if not formatted)
+        id: fmt_check
+        shell: bash
+        run: |
+          echo "=== terraform fmt -check -recursive ===" >> "${{ env.LOG_DIR }}/fmt.log"
+          terraform fmt -check -recursive -diff 2>&1 | tee -a "${{ env.LOG_DIR }}/fmt.log"
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      # --- 2. terraform init ---
+      - name: Terraform init
+        id: init
+        shell: bash
+        run: |
+          echo "=== terraform init ===" | tee "${{ env.LOG_DIR }}/init.log"
+          terraform init 2>&1 | tee -a "${{ env.LOG_DIR }}/init.log"
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      # --- 3. terraform validate ---
+      - name: Terraform validate
+        id: validate
+        shell: bash
+        run: |
+          echo "=== terraform validate ===" | tee "${{ env.LOG_DIR }}/validate.log"
+          terraform validate -no-color 2>&1 | tee -a "${{ env.LOG_DIR }}/validate.log"
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      # --- 4. terraform plan ---
+      - name: Terraform plan
+        id: plan
+        shell: bash
+        run: |
+          echo "=== terraform plan -out=tfplan ===" | tee "${{ env.LOG_DIR }}/plan.log"
+          terraform plan -no-color -input=false -out=tfplan 2>&1 | tee -a "${{ env.LOG_DIR }}/plan.log"
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      # --- 5. terraform apply (수동 실행 시에만, run_apply=true일 때) ---
+      - name: Terraform apply
+        id: apply
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_apply == 'true' }}
+        shell: bash
+        run: |
+          echo "=== terraform apply -auto-approve ===" | tee "${{ env.LOG_DIR }}/apply.log"
+          terraform apply -no-color -auto-approve tfplan 2>&1 | tee -a "${{ env.LOG_DIR }}/apply.log"
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      # --- 실패 시 디버깅용: state list / show ---
+      - name: Terraform state list (for debugging)
+        if: failure() || success()
+        run: |
+          echo "=== terraform state list ===" | tee "${{ env.LOG_DIR }}/state-list.log"
+          terraform state list 2>&1 | tee -a "${{ env.LOG_DIR }}/state-list.log" || true
+        continue-on-error: true
+
+      - name: Terraform show (plan file)
+        if: success() && hashFiles('tfplan') != ''
+        run: |
+          echo "=== terraform show tfplan ===" | tee "${{ env.LOG_DIR }}/plan-show.log"
+          terraform show -no-color tfplan 2>&1 | tee -a "${{ env.LOG_DIR }}/plan-show.log" || true
+        continue-on-error: true
+
+      # --- 항상 로그 artifact 업로드 (성공/실패 모두) ---
+      - name: Upload Terraform logs (all steps)
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-logs-${{ github.run_id }}
+          path: |
+            ${{ env.LOG_DIR }}/
+            tfplan
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # --- 실패 시 디버깅 안내용 artifact (요약) ---
+      - name: Create debug summary on failure
+        if: failure()
+        run: |
+          DEBUG="${{ env.LOG_DIR }}/DEBUG_SUMMARY.md"
+          echo "# Terraform run failed - 디버깅 가이드" > "$DEBUG"
+          echo "" >> "$DEBUG"
+          echo "**Run ID:** ${{ github.run_id }} | **Branch:** ${{ github.ref_name }}" >> "$DEBUG"
+          echo "" >> "$DEBUG"
+          echo "## 실패 단계 확인" >> "$DEBUG"
+          echo "아래 artifact \`terraform-logs-${{ github.run_id }}\` 에서 각 단계 로그를 확인하세요." >> "$DEBUG"
+          echo "" >> "$DEBUG"
+          echo "| 단계 | 로그 파일 | 설명 |" >> "$DEBUG"
+          echo "|------|-----------|------|" >> "$DEBUG"
+          echo "| fmt | fmt.log | 포맷 검사/적용 결과 |" >> "$DEBUG"
+          echo "| init | init.log | 백엔드·프로바이더 초기화 |" >> "$DEBUG"
+          echo "| validate | validate.log | 구문·참조 검증 |" >> "$DEBUG"
+          echo "| plan | plan.log | 변경 계획 (에러 시 여기서 원인 확인) |" >> "$DEBUG"
+          echo "| apply | apply.log | 적용 로그 (apply 실패 시) |" >> "$DEBUG"
+          echo "| state | state-list.log | 현재 state 리소스 목록 |" >> "$DEBUG"
+          echo "" >> "$DEBUG"
+          echo "## 자주 나오는 원인" >> "$DEBUG"
+          echo "- **init 실패**: backend 설정, ARM_* 시크릿, Azure 로그인 확인" >> "$DEBUG"
+          echo "- **plan 실패**: TF_VAR_* (hub/spoke subscription ID), provider 권한 확인" >> "$DEBUG"
+          echo "- **apply 실패**: Azure 할당량, 네이밍 충돌, 의존성 순서 확인" >> "$DEBUG"
+          cat "$DEBUG"
+
+      - name: Upload debug summary
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-summary-${{ github.run_id }}
+          path: ${{ env.LOG_DIR }}/DEBUG_SUMMARY.md
+          retention-days: 30
