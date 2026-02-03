@@ -1,7 +1,8 @@
 #--------------------------------------------------------------
 # 공통 모듈 저장소 지정
 # - 공통 모듈(terraform-modules) 레포 주소. 새 모듈 추가 시 source에 아래 URL 사용.
-# - 예: source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=v1.0.0"
+# - 예: source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=main"
+# - 태그가 없으면 ref=main 사용. (예: ?ref=main)
 # - 각 환경에 맞추어 수정 시: 아래 URL을 해당 환경의 terraform-modules 레포 주소로 변경할 것.
 #   (main.tf 내 모든 module 블록의 source 중 git::...terraform-modules... 부분을 검색·일괄 변경)
 #--------------------------------------------------------------
@@ -57,7 +58,7 @@ module "hub_vnet" {
 # Log Analytics Workspace (공통 모듈)
 #--------------------------------------------------------------
 module "log_analytics_workspace" {
-  source = "./terraform_modules/log-analytics-workspace"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=main"
 
   providers = {
     azurerm = azurerm.hub
@@ -130,7 +131,7 @@ module "storage" {
 # Monitoring VM (공통 모듈 virtual-machine)
 #--------------------------------------------------------------
 module "monitoring_vm" {
-  source = "./terraform_modules/virtual-machine"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=main"
   count  = var.enable_monitoring_vm ? 1 : 0
 
   providers = {
@@ -274,7 +275,7 @@ module "spoke_vnet" {
 # VNet Peering: Hub to Spoke (공통 모듈 vnet-peering)
 #--------------------------------------------------------------
 module "vnet_peering_hub_to_spoke" {
-  source = "./terraform_modules/vnet-peering"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet-peering?ref=main"
 
   providers = {
     azurerm = azurerm.hub

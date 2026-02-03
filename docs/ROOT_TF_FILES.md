@@ -37,7 +37,8 @@ terraform apply (실행)
        ▼
 ┌──────────────────────┐     ┌──────────────────────┐
 │  공통 모듈            │     │  IaC 모듈             │
-│  (terraform_modules) │     │  (modules/)           │
+│  (terraform-modules   │     │  (modules/dev/...)    │
+│   레포 참조)          │     │                      │
 │  log-analytics-      │     │  hub-vnet, spoke-vnet,│
 │  workspace, vnet-    │     │  monitoring-storage,  │
 │  peering, virtual-   │     │  shared-services …   │
@@ -176,7 +177,7 @@ terraform apply (실행)
 | Role Assignment (VM → Storage/KV/Spoke 등) | VM Identity 권한 부여 여러 개 | **선택.** 루트에 두어도 됨 (모듈 간 연결이 명확). 원하면 `modules/dev/hub/role-assignments` 로 묶을 수 있음. |
 
 → Shared Services는 **modules/dev/hub/shared-services** 로 뺐으므로 main.tf에는 **module 블록 + Role Assignment 인라인**만 남음.  
-  **공통 모듈(terraform_modules)** 에는 넣지 않음. (환경당 1세트·조합에 가깝기 때문.)
+  **공통 모듈(terraform-modules 레포)** 에는 넣지 않음. (환경당 1세트·조합에 가깝기 때문.)
 
 ---
 

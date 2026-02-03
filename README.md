@@ -11,7 +11,7 @@ Azure Hub/Spoke 인프라를 Terraform으로 배포할 때 `terraform plan` / `t
 |------|------|
 | **루트 모듈** | `main.tf`, `variables.tf`, `outputs.tf`, `provider.tf`, `terraform.tf`, `locals.tf`, `data.tf` — 배포 진입점. **이 레포 루트에 있음.** |
 | **IaC 전용 모듈** | `modules/` — **환경별**(예: `dev/`) 하위에 **Hub**(vnet, shared-services, monitoring-storage) / **Spoke**(vnet) 기준, 이 프로젝트 전용. |
-| **공통 모듈 (로컬)** | `terraform_modules/` — 재사용 빌딩 블록. 별도 **terraform-modules** 레포로 분리 시 `source = "git::...?ref=태그"` 로 참조. |
+| **공통 모듈** | **[terraform-modules](https://github.com/kimchibee/terraform-modules)** 레포에서 관리. 이 레포(terraform-iac)에는 포함하지 않으며, `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=태그"` 로만 참조. |
 
 다른 Azure 프로젝트가 생기면 **새 IaC(새 레포 또는 `environments/` 하위)** 를 만들고, **같은 공통 모듈(terraform-modules) 레포**를 참조해 같이 쓸 수 있습니다. → [docs/COMMON_MODULE_MIGRATION.md](docs/COMMON_MODULE_MIGRATION.md) §6 참고.
 
@@ -31,7 +31,7 @@ Azure Hub/Spoke 인프라를 Terraform으로 배포할 때 `terraform plan` / `t
 
 4. **초기화 및 배포**  
    ```bash
-   terraform init
+   terraform init   # 공통 모듈은 terraform-modules 레포에서 자동 다운로드
    terraform plan -var-file=terraform.tfvars
    terraform apply -var-file=terraform.tfvars
    ```
@@ -94,16 +94,6 @@ terraform-config/                    # 루트 (IaC 배포 루트)
 ├── terraform.tf                     # Backend, required_providers
 ├── terraform.tfvars.example         # 변수 예시 (실제 값은 tfvars)
 │
-├── terraform_modules/               # 공통 모듈 (재사용 빌딩 블록)
-│   ├── README.md
-│   ├── log-analytics-workspace/     # Log Analytics Workspace 1개
-│   │   ├── main.tf, variables.tf, outputs.tf, versions.tf, README.md
-│   ├── nsg/                         # NSG 1개 + 규칙
-│   ├── diagnostic-settings/         # 진단 설정 1건
-│   ├── vnet-peering/                # VNet Peering 한 방향
-│   ├── private-dns-zone/            # Private DNS Zone 1개 + VNet Link
-│   └── virtual-machine/             # Linux/Windows VM 1대
-│
 ├── modules/                         # IaC 전용 모듈 (환경별 → Hub / Spoke 기준)
 │   └── dev/                         # 개발 환경 (운영계 추가 시 prod/ 등 동일 구성)
 │       ├── hub/                     # Hub 네트워크·공유 서비스
@@ -125,8 +115,8 @@ terraform-config/                    # 루트 (IaC 배포 루트)
     └── README.md                    # IaC 루트 안내 (공통 모듈 참조 방법 등)
 ```
 
-- **루트 `.tf`**: `main.tf`에서 `./terraform_modules/...`(공통)와 `./modules/...`(IaC 전용)를 조합해 사용.
-- **공통 모듈**: `terraform_modules/` — 단일 책임, Git 태그로 버전 관리 후 `git::...?ref=v1.0.0` 참조 가능.
+- **루트 `.tf`**: `main.tf`에서 **공통 모듈**은 `git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/...` 로, **IaC 모듈**은 `./modules/...` 로 참조.
+- **공통 모듈**: [terraform-modules](https://github.com/kimchibee/terraform-modules) 레포에서 관리 (log-analytics-workspace, nsg, diagnostic-settings, vnet-peering, private-dns-zone, virtual-machine 등). 이 레포에는 포함하지 않으며 `?ref=태그` 로 버전 지정.
 - **IaC 모듈**: `modules/` — **환경별**(예: `dev/`) 하위에 **Hub**(`dev/hub/vnet`, `dev/hub/shared-services`, `dev/hub/monitoring-storage`) / **Spoke**(`dev/spoke/vnet`) 기준으로 구분, 루트에서만 호출.
 
 ---

@@ -1,5 +1,7 @@
 # Terraform
 .terraform/
+# 공통 모듈은 terraform-modules 레포에서만 관리. 로컬 복사본이 있어도 커밋하지 않음.
+terraform_modules/
 *.tfstate
 *.tfstate.*
 crash.log
