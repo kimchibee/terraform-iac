@@ -11,7 +11,7 @@ Azure Hub/Spoke 인프라를 Terraform으로 배포할 때 `terraform plan` / `t
 |------|------|
 | **루트 모듈** | `main.tf`, `variables.tf`, `outputs.tf`, `provider.tf`, `terraform.tf`, `locals.tf`, `data.tf` — 배포 진입점. **이 레포 루트에 있음.** |
 | **IaC 전용 모듈** | `modules/` — **환경별**(예: `dev/`) 하위에 **Hub**(vnet, shared-services, monitoring-storage) / **Spoke**(vnet) 기준, 이 프로젝트 전용. |
-| **공통 모듈** | **[terraform-modules](https://github.com/kimchibee/terraform-modules)** 레포에서 관리. 이 레포(terraform-iac)에는 포함하지 않으며, `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=태그"` 로만 참조. |
+| **공통 모듈** | **[terraform-modules](https://github.com/kimchibee/terraform-modules)** 레포에서 관리. 이 레포(terraform-iac)에는 포함하지 않으며, `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=main"` 또는 `?ref=태그` 로만 참조. |
 
 다른 Azure 프로젝트가 생기면 **새 IaC(새 레포 또는 `environments/` 하위)** 를 만들고, **같은 공통 모듈(terraform-modules) 레포**를 참조해 같이 쓸 수 있습니다. → [docs/COMMON_MODULE_MIGRATION.md](docs/COMMON_MODULE_MIGRATION.md) §6 참고.
 
@@ -63,7 +63,7 @@ Azure Hub/Spoke 인프라를 Terraform으로 배포할 때 `terraform plan` / `t
   - **명시 위치**: `main.tf` **맨 위 주석 블록** — "공통 모듈 저장소 지정" 으로 검색하면 됨.
   - **실제 사용 위치**: 각 `module "..."` 블록 안의 **`source = "..."`** 인자 (공통 모듈을 쓸 때)
 - **IaC 모듈**: `source = "./modules/환경/경로/모듈명"` (예: `./modules/dev/hub/vnet`, `./modules/dev/spoke/vnet`)
-- **공통 모듈(terraform-modules 레포)**: `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=v1.0.0"`
+- **공통 모듈(terraform-modules 레포)**: `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=main"` (태그 배포 후에는 `?ref=v1.0.0` 등 사용 가능)
 
 즉, **모듈을 추가·변경·삭제할 때 수정하는 파일은 `main.tf`** 이고,  
 공통 모듈 버전을 바꿀 때는 `main.tf`의 해당 `module` 블록에서 `source`의 `ref=` 값만 바꾸면 됩니다.  
@@ -74,7 +74,7 @@ Azure Hub/Spoke 인프라를 Terraform으로 배포할 때 `terraform plan` / `t
 ## 파일 및 디렉터리 계층 구조
 
 ```
-terraform-config/                    # 루트 (IaC 배포 루트)
+terraform-iac/                       # 이 레포 루트 (IaC 배포 루트)
 ├── .gitignore
 ├── .terraform.lock.hcl
 ├── config/                          # 정책·설정 파일
@@ -116,7 +116,7 @@ terraform-config/                    # 루트 (IaC 배포 루트)
 ```
 
 - **루트 `.tf`**: `main.tf`에서 **공통 모듈**은 `git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/...` 로, **IaC 모듈**은 `./modules/...` 로 참조.
-- **공통 모듈**: [terraform-modules](https://github.com/kimchibee/terraform-modules) 레포에서 관리 (log-analytics-workspace, nsg, diagnostic-settings, vnet-peering, private-dns-zone, virtual-machine 등). 이 레포에는 포함하지 않으며 `?ref=태그` 로 버전 지정.
+- **공통 모듈**: [terraform-modules](https://github.com/kimchibee/terraform-modules) 레포에서 관리 (log-analytics-workspace, virtual-machine, vnet-peering 등). 이 레포에는 포함하지 않으며 `?ref=main` 또는 `?ref=태그` 로 버전 지정.
 - **IaC 모듈**: `modules/` — **환경별**(예: `dev/`) 하위에 **Hub**(`dev/hub/vnet`, `dev/hub/shared-services`, `dev/hub/monitoring-storage`) / **Spoke**(`dev/spoke/vnet`) 기준으로 구분, 루트에서만 호출.
 
 ---
@@ -500,8 +500,8 @@ terraform apply -var-file=terraform.tfvars        # 적용
 |------|------|------|
 | **어디에 명시되나?** | **`main.tf`** | 각 `module "..."` 블록의 **`source = "..."`** |
 | **레거시 모듈** | `main.tf` | `source = "./modules/경로/모듈명"` |
-| **공통 모듈(terraform-modules)** | `main.tf` | `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=v1.0.0"` |
-| **버전(ref) 변경** | `main.tf` | 위 `source` 줄에서 `ref=v1.0.0` → `ref=v1.1.0` 등으로 수정 |
+| **공통 모듈(terraform-modules)** | `main.tf` | `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=main"` (또는 `?ref=태그`) |
+| **버전(ref) 변경** | `main.tf` | 위 `source` 줄에서 `ref=main` → `ref=v1.0.0` 등으로 수정 |
 
 ### 5.3 체크리스트 (추가/변경/삭제 시)
 
