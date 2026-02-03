@@ -1,0 +1,17 @@
+name: ml-environment
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pip
+  - numpy
+  - pandas
+  - scikit-learn
+  - pip:
+    - azureml-core
+    - azureml-sdk
+    - openai
+    - transformers
+    - torch
+    - tensorflow

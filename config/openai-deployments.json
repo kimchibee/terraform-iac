@@ -1,0 +1,16 @@
+{
+  "deployments": [
+    {
+      "name": "gpt-4o-mini",
+      "model_name": "gpt-4o-mini",
+      "version": "2024-07-18",
+      "capacity": 10,
+      "scale_type": "GlobalStandard"
+    }
+  ],
+  "api_versions": {
+    "chat_completions": "2024-08-01-preview",
+    "embeddings": "2024-08-01-preview"
+  },
+  "description": "Azure OpenAI 모델 배포 설정 템플릿. terraform.tfvars의 openai_deployments 변수와 연동하여 사용할 수 있습니다."
+}
