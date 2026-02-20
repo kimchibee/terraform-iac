@@ -99,7 +99,7 @@ terraform-iac/
 ### 필수 사전 준비
 
 1. **도구 설치**
-   - Terraform 1.5+ 설치
+   - **Terraform 1.9+** 설치 (shared-services 스택이 terraform-modules AVM 래퍼 사용 시 1.9 이상 필요)
    - Azure CLI 설치 및 로그인: `az login`
    - Hub/Spoke 구독 ID 확보
 
@@ -592,6 +592,21 @@ for stack in network storage shared-services apim ai-services compute connectivi
   terraform state pull > ../../backups/${stack}.tfstate.backup
 done
 ```
+
+---
+
+## terraform-modules 연동 스택 검증
+
+**shared-services** 스택은 공동 모듈(terraform-modules)의 **log-analytics-workspace**(AVM 래퍼)를 사용합니다. 배포 전 아래로 검증하세요.
+
+1. **Terraform 버전**: `terraform version` → **1.9 이상** 필요.
+2. **shared-services init/validate**:
+   ```bash
+   cd azure/dev/shared-services
+   terraform init -backend=false   # 또는 실제 backend 설정 후 init
+   terraform validate
+   ```
+3. 자세한 요구사항·이슈 대응은 **terraform-modules** 레포의 `terraform_modules/IAC_VERIFICATION.md` 참고.
 
 ---
 
