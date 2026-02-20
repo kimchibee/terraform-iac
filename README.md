@@ -606,7 +606,34 @@ done
    terraform init -backend=false   # 또는 실제 backend 설정 후 init
    terraform validate
    ```
-3. 자세한 요구사항·이슈 대응은 **terraform-modules** 레포의 `terraform_modules/IAC_VERIFICATION.md` 참고.
+3. **모든 dev 스택 한 번에 검증** (각 스택에서 `terraform init -backend=false` 후 스크립트 실행):
+   - **PowerShell 실행 정책** 때문에 `.ps1` 실행이 막히면 **`run-all-validate.cmd`** 더블클릭 또는 `.\run-all-validate.cmd` 실행.
+   - 또는: `powershell -ExecutionPolicy Bypass -File .\run-all-validate.ps1`
+   ```powershell
+   cd azure/dev
+   .\run-all-validate.cmd
+   # 또는 .\run-all-validate.ps1  (실행 정책 허용 시)
+   ```
+   - 순서: network → storage → shared-services → apim → ai-services → compute → connectivity
+   - **network**는 모듈 갱신 후 `terraform init -upgrade -backend=false` 권장.
+4. **한 스택씩 검증**은 아래 "스택별 init/validate 명령" 표 참고.
+5. 자세한 요구사항·이슈 대응은 **terraform-modules** 레포의 `README.md` 참고.
+
+---
+
+### 스택별 init/validate 명령 (한 스택씩 검증 시)
+
+아래는 스택 순서대로 한 줄씩 실행하면 됩니다. 경로는 프로젝트 루트 기준입니다.
+
+| 순서 | 스택 | 명령 |
+|------|------|------|
+| 1 | network | `cd azure/dev/network` → `terraform init -upgrade -backend=false` → `terraform validate` |
+| 2 | storage | `cd azure/dev/storage` → `terraform init -backend=false` → `terraform validate` |
+| 3 | shared-services | `cd azure/dev/shared-services` → `terraform init -backend=false` → `terraform validate` |
+| 4 | apim | `cd azure/dev/apim` → `terraform init -backend=false` → `terraform validate` |
+| 5 | ai-services | `cd azure/dev/ai-services` → `terraform init -backend=false` → `terraform validate` |
+| 6 | compute | `cd azure/dev/compute` → `terraform init -backend=false` → `terraform validate` |
+| 7 | connectivity | `cd azure/dev/connectivity` → `terraform init -backend=false` → `terraform validate` |
 
 ---
 
