@@ -5,6 +5,42 @@
 
 ---
 
+## 사용자 환경 (필요한 것)
+
+이 코드를 사용하려면 아래 환경을 갖춰야 합니다.
+
+| 구분 | 내용 |
+|------|------|
+| **OS** | Windows, macOS, Linux (Terraform·Azure CLI 지원 환경) |
+| **Terraform** | **1.9 이상** (shared-services 스택의 공통 모듈이 1.9+ 필요). [다운로드](https://www.terraform.io/downloads) |
+| **Azure CLI** | 설치 후 `az login`으로 로그인. [설치 가이드](https://learn.microsoft.com/ko-kr/cli/azure/install-azure-cli) |
+| **Azure 구독** | Hub 구독 1개, Spoke 구독 1개 (또는 단일 구독으로 Hub/Spoke 동시 구성 가능) |
+| **권한** | 각 구독에서 **Contributor** 또는 **Owner** (리소스 생성·State 저장소 접근 필요) |
+| **Backend 저장소** | Terraform State를 저장할 Azure Storage Account·Container. 최초 1회 **bootstrap**으로 생성. |
+| **환경 변수 (선택)** | `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` 등으로 서비스 주체 인증 가능. 미설정 시 `az login` 계정 사용. |
+
+**정리:** PC에 Terraform 1.9+ 와 Azure CLI를 설치하고, `az login` 한 뒤, 배포할 구독 ID를 각 스택의 `terraform.tfvars`에 넣으면 됩니다.
+
+---
+
+## 이 저장소는 어떻게 구성되어 있는가
+
+- **두 저장소 역할**
+  - **terraform-iac (이 저장소)**: 실제로 `terraform init / plan / apply`를 실행하는 **배포용** 저장소. 스택별 디렉터리, Backend 설정, 변수 파일이 여기 있음.
+  - **[terraform-modules](https://github.com/kimchibee/terraform-modules)**: 재사용 가능한 **공통 모듈**만 모음. terraform-iac의 각 스택이 `source = "git::...terraform-modules.git//terraform_modules/모듈명?ref=main"` 형태로 가져다 씀. **terraform-modules에서는 apply 하지 않음.**
+
+- **스택이란**  
+  `azure/dev/` 아래 **network**, **storage**, **shared-services**, **apim**, **ai-services**, **compute**, **connectivity** 처럼 **한 디렉터리 = 한 스택**입니다. 스택마다 별도 State 파일을 쓰므로, 한 스택만 배포·롤백할 수 있습니다.
+
+- **배포 순서**  
+  **1 → 2 → 3 → … → 7** 순서를 지켜야 합니다. (network → storage → shared-services → apim → ai-services → compute → connectivity)  
+  뒤쪽 스택이 앞쪽 스택의 **출력(remote_state)**을 참조하기 때문입니다.
+
+- **설정 파일**  
+  각 스택 디렉터리에는 `terraform.tfvars.example`이 있습니다. 복사해 `terraform.tfvars`로 만든 뒤, 구독 ID·리소스 이름 등만 채우면 됩니다.
+
+---
+
 ## 전체 디렉터리 구조
 
 ```
