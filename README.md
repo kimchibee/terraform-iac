@@ -606,18 +606,8 @@ done
    terraform init -backend=false   # 또는 실제 backend 설정 후 init
    terraform validate
    ```
-3. **모든 dev 스택 한 번에 검증** (각 스택에서 `terraform init -backend=false` 후 스크립트 실행):
-   - **PowerShell 실행 정책** 때문에 `.ps1` 실행이 막히면 **`run-all-validate.cmd`** 더블클릭 또는 `.\run-all-validate.cmd` 실행.
-   - 또는: `powershell -ExecutionPolicy Bypass -File .\run-all-validate.ps1`
-   ```powershell
-   cd azure/dev
-   .\run-all-validate.cmd
-   # 또는 .\run-all-validate.ps1  (실행 정책 허용 시)
-   ```
-   - 순서: network → storage → shared-services → apim → ai-services → compute → connectivity
-   - **network**는 모듈 갱신 후 `terraform init -upgrade -backend=false` 권장.
-4. **한 스택씩 검증**은 아래 "스택별 init/validate 명령" 표 참고.
-5. 자세한 요구사항·이슈 대응은 **terraform-modules** 레포의 `README.md` 참고.
+3. **각 스택 검증**은 아래 "스택별 init/validate 명령" 표를 순서대로 실행하면 됩니다.
+4. 자세한 요구사항·이슈 대응은 **terraform-modules** 레포의 `README.md` 참고.
 
 ---
 
