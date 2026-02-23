@@ -22,7 +22,7 @@ data "terraform_remote_state" "network" {
 # Log Analytics Workspace (공통 모듈)
 #--------------------------------------------------------------
 module "log_analytics_workspace" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=main"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=avm-1.0.0"
 
   providers = {
     azurerm = azurerm.hub
