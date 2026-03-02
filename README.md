@@ -3,6 +3,8 @@
 이 저장소는 **AWS 스택 분리 방식**을 적용하여 Azure Hub/Spoke 인프라를 관리합니다.  
 각 스택을 **독립적으로 배포/롤백**할 수 있으며, **State 파일이 분리**되어 있습니다.
 
+> **📖 상세 통합 가이드**: Terraform 기초, Azure AVM 개념, 레포 분리 이유, 리소스 추가·변경·삭제 메뉴얼, 용어 풀이는 **[docs/TERRAFORM_GUIDE.md](docs/TERRAFORM_GUIDE.md)** 를 참고하세요.
+
 ---
 
 ## 사용자 환경 (필요한 것)
