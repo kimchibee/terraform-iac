@@ -37,7 +37,7 @@ data "terraform_remote_state" "compute" {
 # Storage Module (Key Vault & Monitoring Storage)
 #--------------------------------------------------------------
 module "storage" {
-  source = "../../../modules/dev/hub/monitoring-storage"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/monitoring-storage?ref=deploy"
 
   providers = {
     azurerm = azurerm.hub

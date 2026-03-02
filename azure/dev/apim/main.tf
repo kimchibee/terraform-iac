@@ -48,7 +48,7 @@ data "terraform_remote_state" "shared_services" {
 # 기존 spoke_vnet 모듈을 재사용하되, OpenAI와 AI Foundry는 제외
 #--------------------------------------------------------------
 module "apim" {
-  source = "../../../modules/dev/spoke/vnet"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-workloads?ref=deploy"
 
   providers = {
     azurerm = azurerm.spoke
@@ -67,6 +67,8 @@ module "apim" {
   vnet_name          = data.terraform_remote_state.network.outputs.spoke_vnet_name
   vnet_address_space = data.terraform_remote_state.network.outputs.spoke_vnet_address_space
   subnets            = {}  # Subnets는 network 스택에서 관리
+  subnet_id_apim     = data.terraform_remote_state.network.outputs.spoke_subnet_ids["apim-snet"]
+  subnet_id_pep      = data.terraform_remote_state.network.outputs.spoke_subnet_ids["pep-snet"]
 
   # Hub VNet (for peering)
   hub_vnet_id             = data.terraform_remote_state.network.outputs.hub_vnet_id

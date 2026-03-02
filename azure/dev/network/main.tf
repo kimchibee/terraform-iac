@@ -8,7 +8,7 @@
 # Hub VNet Module
 #--------------------------------------------------------------
 module "hub_vnet" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/hub-vnet?ref=main"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/hub-vnet?ref=deploy"
 
   providers = {
     azurerm = azurerm.hub
@@ -26,7 +26,7 @@ module "hub_vnet" {
   # Virtual Network
   vnet_name          = local.hub_vnet_name
   vnet_address_space = var.hub_vnet_address_space
-  subnets            = var.hub_subnets
+  subnets            = local.hub_subnets
 
   # VPN Gateway
   vpn_gateway_name      = local.hub_vpn_gateway_name
@@ -48,7 +48,7 @@ module "hub_vnet" {
 # Storage와 Shared Services는 나중에 remote_state로 참조
 #--------------------------------------------------------------
 module "spoke_vnet" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-vnet?ref=main"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-vnet?ref=deploy"
 
   providers = {
     azurerm = azurerm.spoke
@@ -66,7 +66,7 @@ module "spoke_vnet" {
   # Virtual Network
   vnet_name          = local.spoke_vnet_name
   vnet_address_space = var.spoke_vnet_address_space
-  subnets            = var.spoke_subnets
+  subnets            = local.spoke_subnets
 
   # Hub VNet Peering (같은 스택 내에서 직접 참조)
   enable_hub_peering     = true

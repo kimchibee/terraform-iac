@@ -47,7 +47,7 @@ data "terraform_remote_state" "ai_services" {
 # Monitoring VM (공통 모듈 virtual-machine)
 #--------------------------------------------------------------
 module "monitoring_vm" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=main"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=deploy"
   count  = var.enable_monitoring_vm ? 1 : 0
 
   providers = {
