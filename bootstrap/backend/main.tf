@@ -49,8 +49,8 @@ resource "azurerm_storage_account" "tf_state" {
   account_replication_type = "LRS"
   min_tls_version          = "TLS1_2"
 
-  # Security
-  public_network_access_enabled = false
+  # Security (Backend는 init/plan/apply 시 접근 필요; Private Endpoint 배포 후 false 전환 가능)
+  public_network_access_enabled = true
   allow_nested_items_to_be_public = false
 
   # Enable versioning
@@ -75,13 +75,14 @@ resource "azurerm_storage_container" "tfstate" {
 }
 
 #--------------------------------------------------------------
-# Private Endpoint for Storage Account
+# Private Endpoint for Storage Account (subnet_id 있을 때만 생성)
 #--------------------------------------------------------------
 resource "azurerm_private_endpoint" "storage" {
+  count               = length(trimspace(var.subnet_id)) > 0 ? 1 : 0
   name                = "pe-${var.storage_account_name}"
   location            = azurerm_resource_group.backend.location
   resource_group_name = azurerm_resource_group.backend.name
-  subnet_id           = var.subnet_id  # Optional - VNet이 있으면 설정
+  subnet_id           = var.subnet_id
 
   private_service_connection {
     name                           = "psc-${var.storage_account_name}"
@@ -89,12 +90,6 @@ resource "azurerm_private_endpoint" "storage" {
     subresource_names              = ["blob"]
     is_manual_connection           = false
   }
-
-  # Private DNS Zone (optional)
-  # private_dns_zone_group {
-  #   name                 = "default"
-  #   private_dns_zone_ids = [var.private_dns_zone_id]
-  # }
 
   tags = var.tags
 }

@@ -54,9 +54,9 @@ variable "backend_container_name" {
 
 # VM Variables
 variable "vm_size" {
-  description = "Size of the monitoring VM"
+  description = "Size of the monitoring VM (Korea Central 가용량 제한 시 Standard_D2s_v3, Standard_B2ms 등 사용)"
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_D2s_v3"
 }
 
 variable "vm_admin_username" {
@@ -65,11 +65,11 @@ variable "vm_admin_username" {
   default     = "azureadmin"
 }
 
-variable "vm_admin_password" {
-  description = "Admin password for VM"
+# VM 접근은 PEM 키로만 함. Terraform이 SSH 키 쌍을 생성하고 개인키를 아래 파일명으로 저장
+variable "vm_ssh_private_key_filename" {
+  description = "Monitoring VM SSH 개인키 저장 파일명 (compute 스택 디렉터리 기준). .gitignore 대상."
   type        = string
-  sensitive   = true
-  default     = ""
+  default     = "monitoring_vm_key.pem"
 }
 
 # Feature Flags
