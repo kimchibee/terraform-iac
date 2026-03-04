@@ -26,7 +26,7 @@ module "hub_vnet" {
   # Virtual Network
   vnet_name          = local.hub_vnet_name
   vnet_address_space = var.hub_vnet_address_space
-  subnets            = var.hub_subnets
+  subnets            = local.hub_subnets
 
   # VPN Gateway
   vpn_gateway_name      = local.hub_vpn_gateway_name
@@ -66,7 +66,7 @@ module "spoke_vnet" {
   # Virtual Network
   vnet_name          = local.spoke_vnet_name
   vnet_address_space = var.spoke_vnet_address_space
-  subnets            = var.spoke_subnets
+  subnets            = local.spoke_subnets
 
   # Hub VNet Peering (같은 스택 내에서 직접 참조)
   enable_hub_peering     = true
