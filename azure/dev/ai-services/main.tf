@@ -48,7 +48,7 @@ data "terraform_remote_state" "shared_services" {
 # 기존 spoke_vnet 모듈을 재사용하되, APIM은 제외
 #--------------------------------------------------------------
 module "ai_services" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-workloads?ref=deploy"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-workloads?ref=main"
 
   providers = {
     azurerm = azurerm.spoke
@@ -99,10 +99,10 @@ module "ai_services" {
 
   # Hub Monitoring Storage (from storage stack)
   hub_monitoring_storage_ids = {
-    openai    = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["openailog"]
+    openai    = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["aoailog"]
     apim      = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["apimlog"]
     aifoundry = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["aifoundrylog"]
     acr       = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["acrlog"]
-    spoke_kv  = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["spokekvlog"]
+    spoke_kv  = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["spkvlog"]
   }
 }

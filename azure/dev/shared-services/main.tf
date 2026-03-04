@@ -19,10 +19,10 @@ data "terraform_remote_state" "network" {
 }
 
 #--------------------------------------------------------------
-# Log Analytics Workspace (공통 모듈)
+# Log Analytics Workspace (공통 모듈) — 소스는 modules 레포만 사용
 #--------------------------------------------------------------
 module "log_analytics_workspace" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=deploy"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=main"
 
   providers = {
     azurerm = azurerm.hub
@@ -39,7 +39,7 @@ module "log_analytics_workspace" {
 # Shared Services: Solutions / Action Group / Dashboard (IaC 모듈)
 #--------------------------------------------------------------
 module "shared_services" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/shared-services?ref=deploy"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/shared-services?ref=main"
 
   providers = {
     azurerm = azurerm.hub

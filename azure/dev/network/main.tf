@@ -8,7 +8,7 @@
 # Hub VNet Module
 #--------------------------------------------------------------
 module "hub_vnet" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/hub-vnet?ref=deploy"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/hub-vnet?ref=main"
 
   providers = {
     azurerm = azurerm.hub
@@ -48,7 +48,7 @@ module "hub_vnet" {
 # Storage와 Shared Services는 나중에 remote_state로 참조
 #--------------------------------------------------------------
 module "spoke_vnet" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-vnet?ref=deploy"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-vnet?ref=main"
 
   providers = {
     azurerm = azurerm.spoke

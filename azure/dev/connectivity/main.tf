@@ -47,7 +47,7 @@ data "terraform_remote_state" "shared_services" {
 # VNet Peering: Hub to Spoke (공통 모듈 vnet-peering)
 #--------------------------------------------------------------
 module "vnet_peering_hub_to_spoke" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet-peering?ref=deploy"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet-peering?ref=main"
 
   providers = {
     azurerm = azurerm.hub

@@ -48,7 +48,7 @@ data "terraform_remote_state" "shared_services" {
 # 기존 spoke_vnet 모듈을 재사용하되, OpenAI와 AI Foundry는 제외
 #--------------------------------------------------------------
 module "apim" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-workloads?ref=deploy"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/spoke-workloads?ref=main"
 
   providers = {
     azurerm = azurerm.spoke

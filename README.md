@@ -3,7 +3,126 @@
 이 저장소는 **AWS 스택 분리 방식**을 적용하여 Azure Hub/Spoke 인프라를 관리합니다.  
 각 스택을 **독립적으로 배포/롤백**할 수 있으며, **State 파일이 분리**되어 있습니다.
 
-> **📖 상세 통합 가이드**: Terraform 기초, Azure AVM 개념, 레포 분리 이유, 리소스 추가·변경·삭제 메뉴얼, 용어 풀이는 **[docs/TERRAFORM_GUIDE.md](docs/TERRAFORM_GUIDE.md)** 를 참고하세요.
+---
+
+## 처음 Terraform을 사용하는 사람을 위한 메뉴얼
+
+Terraform을 처음 쓰는 경우, 아래 순서대로 읽으면 **기초 개념 → 배포 → 검증 → 리소스 추가/변경/삭제**까지 한 번에 이해할 수 있습니다.
+
+### Terraform 기초 (필수 명령어)
+
+| 명령어 | 설명 |
+|--------|------|
+| **terraform init** | 프로바이더·모듈 다운로드, Backend(State 저장 위치) 초기화. 스택 디렉터리 진입 후 **최초 1회** 또는 backend 설정 변경 시 실행. |
+| **terraform plan** | 코드와 현재 State를 비교해 **무엇이 추가/변경/삭제될지** 미리 보여 줌. 실제 리소스는 변경되지 않음. |
+| **terraform apply** | plan에서 제안한 변경을 **실제 Azure에 반영**. 확인 프롬프트가 나오면 `yes` 입력. |
+| **terraform destroy** | 해당 스택에서 관리 중인 리소스를 **전부 삭제**. 신중히 사용. |
+
+- **State**: Terraform이 "지금 관리 중인 리소스 목록"을 저장한 파일. 보통 Azure Storage에 원격 저장되어 팀이 공유함.
+- **스택**: `azure/dev/` 아래 한 디렉터리(예: network, storage)가 한 스택. 스택마다 **별도 State**를 가지므로, 한 스택만 배포·롤백 가능.
+
+### 스택 순서대로 배포하는 방법
+
+배포는 **반드시 아래 순서**를 지켜야 합니다. 뒤쪽 스택이 앞쪽 스택의 출력(remote_state)을 참조하기 때문입니다.
+
+| 순서 | 스택 | 디렉터리 | 한 줄 요약 |
+|------|------|----------|------------|
+| 0 | Bootstrap | `bootstrap/backend` | Backend용 Storage 계정·컨테이너 생성 (최초 1회) |
+| 1 | network | `azure/dev/network` | Hub/Spoke VNet, 서브넷, VPN Gateway, DNS Resolver, NSG |
+| 2 | storage | `azure/dev/storage` | Key Vault, Monitoring Storage 계정들, Private Endpoints |
+| 3 | shared-services | `azure/dev/shared-services` | Log Analytics, Solutions, Action Group, Dashboard |
+| 4 | apim | `azure/dev/apim` | API Management |
+| 5 | ai-services | `azure/dev/ai-services` | Azure OpenAI, AI Foundry, ACR, Private Endpoints |
+| 6 | compute | `azure/dev/compute` | Monitoring VM, Role Assignments |
+| 7 | connectivity | `azure/dev/connectivity` | VNet Peering (Hub↔Spoke), 진단 설정 |
+
+**각 스택 공통 절차:**
+
+1. 해당 디렉터리로 이동: `cd azure/dev/<스택명>`
+2. 변수 파일 준비: `cp terraform.tfvars.example terraform.tfvars` 후 구독 ID 등 수정
+3. Backend 설정: `backend.hcl.example`을 복사해 `backend.hcl`로 만들고, Bootstrap에서 나온 `resource_group_name`, `storage_account_name`, `container_name` 입력
+4. 초기화 및 적용:
+   ```bash
+   terraform init -backend-config=backend.hcl
+   terraform plan -var-file=terraform.tfvars
+   terraform apply -var-file=terraform.tfvars
+   ```
+5. apply 시 "Do you want to perform these actions?" 나오면 **yes** 입력
+
+상세한 단계별 명령어는 아래 [빠른 시작](#빠른-시작)과 [배포 단계](#배포-단계)를 참고하세요.
+
+### 배포 검증: Azure에서 리소스가 정상인지 확인
+
+배포 후 **az 명령어**로 실제 Azure에 리소스가 생겼는지 확인할 수 있습니다. (구독 ID는 본인 환경에 맞게 바꿔서 실행.)
+
+```bash
+az account set --subscription "YOUR_SUBSCRIPTION_ID"
+az group list --query "[?contains(name,'test-x-x') || contains(name,'terraform-state')].{name:name, location:location}" -o table
+az resource list --resource-group "test-x-x-rg" --query "[].{name:name, type:type}" -o table
+az resource list --resource-group "test-x-x-spoke-rg" --query "[].{name:name, type:type}" -o table
+az network vnet peering list --resource-group "test-x-x-rg" --vnet-name "test-x-x-vnet" -o table
+```
+
+**검증 결과 요약 (실제 조회 기준):**
+
+| 항목 | 기대 결과 |
+|------|-----------|
+| 리소스 그룹 | `terraform-state-rg`, `test-x-x-rg`, `test-x-x-spoke-rg` (koreacentral) |
+| Hub VNet | `test-x-x-vnet` (10.0.0.0/20) |
+| Spoke VNet | `test-x-x-spoke-vnet` (10.1.0.0/24) |
+| Peering | `test-x-x-vnet-to-spoke` → **Connected** |
+| Hub 리소스 | VNet, VPN Gateway, NSG, Key Vault, Storage 11개, VM, Log Analytics, Solutions 등 |
+| Spoke 리소스 | APIM, Azure OpenAI, AI Foundry, ACR, Storage, Private Endpoints 3개 등 |
+
+위 명령에서 에러 없이 리소스가 나오고, Peering이 Connected이면 **모든 스택이 정상 배포된 것**으로 볼 수 있습니다.
+
+### 리소스 추가 방법
+
+- **기존 스택에 리소스 추가**: 해당 스택의 `main.tf`에 모듈 또는 리소스 블록을 추가하고, `variables.tf`·`terraform.tfvars`에 변수와 값을 넣은 뒤, 해당 디렉터리에서 `terraform plan` → `terraform apply` 실행.
+- **예: VM 추가**  
+  `azure/dev/compute/main.tf`에 새 VM 모듈 블록 추가 → `variables.tf`에 변수 정의 → `terraform.tfvars`에 값 설정 → `cd azure/dev/compute` 후 `terraform plan -var-file=terraform.tfvars` → `terraform apply -var-file=terraform.tfvars`.
+- **예: Storage 계정 추가**  
+  Storage 스택의 `main.tf`에 `azurerm_storage_account` 리소스 또는 모듈 호출 추가 후 동일하게 plan/apply.
+
+자세한 예시(새 VM, 새 Storage, 새 APIM 등)는 아래 [새 인스턴스 생성 방법](#새-인스턴스-생성-방법)을 참고하세요.
+
+### 리소스 변경 방법
+
+1. 해당 스택의 **코드**(`.tf`) 또는 **변수**(`terraform.tfvars`)를 수정합니다.
+2. 해당 스택 디렉터리에서 `terraform plan -var-file=terraform.tfvars`로 변경 계획을 확인합니다.
+3. 문제 없으면 `terraform apply -var-file=terraform.tfvars`로 적용합니다.
+
+Terraform은 **선언형**이므로, "원하는 최종 상태"를 코드에 쓰면 Terraform이 현재 상태와 비교해 필요한 변경만 수행합니다.
+
+### 리소스 삭제 방법
+
+- **특정 리소스만 삭제**:  
+  `terraform destroy -target=리소스_주소 -var-file=terraform.tfvars`  
+  예: `terraform destroy -target=module.monitoring_vm[0] -var-file=terraform.tfvars`
+- **해당 스택 전체 삭제**:  
+  해당 스택 디렉터리에서 `terraform destroy -var-file=terraform.tfvars`  
+  (확인 프롬프트에 `yes` 입력)
+- **리소스만 Azure에서 삭제하고 State에는 남기고 싶지 않다면**:  
+  보통은 `destroy`로 State와 실제 리소스를 함께 제거하는 것이 맞습니다. 이미 Azure에서 수동 삭제한 리소스는 `terraform state rm <주소>`로 State에서만 제거할 수 있습니다.
+
+스택 삭제는 **의존성 역순**(connectivity → compute → ai-services → apim → shared-services → storage → network)으로 진행하는 것이 안전합니다.
+
+### Backend Storage(State 저장소) 이름 수정
+
+State를 저장하는 **스토리지 계정 이름**은 Azure **전역 고유**이므로, 레포를 clone한 사용자는 본인만의 이름으로 바꿔야 합니다.
+
+1. `bootstrap/backend/terraform.tfvars`에서 **storage_account_name**을 소문자·숫자만 3~24자(하이픈 불가)로 수정. 예: `tfstate` + 구독 ID 뒤 6자리.
+2. Bootstrap을 먼저 실행해 해당 이름으로 Storage 계정을 생성한 뒤, 각 스택의 `backend.hcl`에 동일한 `storage_account_name`을 넣습니다.
+
+### 공동 모듈(terraform-modules) 수정이 필요할 때
+
+모든 스택은 공통 모듈을 **terraform-modules** 레포(Git)만 참조합니다. 모듈 쪽 코드를 바꿔야 할 때:
+
+1. **terraform-modules** 레포를 로컬에서 수정한 뒤, 원격에 커밋·푸시합니다.
+2. **terraform-iac**의 해당 스택에서 `terraform init -upgrade`(또는 `terraform get -update`)로 모듈을 다시 받습니다.
+3. `terraform plan` / `terraform apply`로 동작을 확인합니다.
+
+모듈의 **ref**(브랜치/태그)를 바꾸려면 해당 스택의 `main.tf` 등에서 `source = "git::...?ref=main"`의 `ref`만 변경한 뒤 init/plan/apply 하면 됩니다.
 
 ---
 
@@ -21,7 +140,39 @@
 | **Backend 저장소** | Terraform State를 저장할 Azure Storage Account·Container. 최초 1회 **bootstrap**으로 생성. |
 | **환경 변수 (선택)** | `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` 등으로 서비스 주체 인증 가능. 미설정 시 `az login` 계정 사용. |
 
-**정리:** PC에 Terraform 1.9+ 와 Azure CLI를 설치하고, `az login` 한 뒤, 배포할 구독 ID를 각 스택의 `terraform.tfvars`에 넣으면 됩니다.
+### 구독 Resource Provider 등록 (필수)
+
+각 스택에서 사용하는 Azure 서비스를 쓰려면 **구독에 해당 Resource Provider가 등록**되어 있어야 합니다. 등록되지 않으면 `MissingSubscriptionRegistration`(409) 오류가 발생합니다. 배포 전에 아래 Provider를 등록하세요.
+
+| Provider | 사용 스택 | 용도 |
+|----------|-----------|------|
+| `Microsoft.OperationalInsights` | shared-services | Log Analytics Workspace |
+| `Microsoft.Insights` | shared-services | Action Group, Monitor 리소스 |
+| `Microsoft.OperationsManagement` | shared-services | Log Analytics Solutions (ContainerInsights, SecurityInsights) |
+| `Microsoft.ApiManagement` | apim | API Management 서비스 |
+| `Microsoft.Network` | network, connectivity | VNet, Subnet, NSG, VPN Gateway, Peering 등 (대부분 구독에 기본 등록됨) |
+| `Microsoft.Storage` | bootstrap, storage | Storage Account |
+| `Microsoft.KeyVault` | storage | Key Vault |
+| `Microsoft.Compute` | compute | VM 등 |
+
+**등록 명령 (Azure CLI):**
+
+```bash
+az provider register --namespace Microsoft.OperationalInsights
+az provider register --namespace Microsoft.Insights
+az provider register --namespace Microsoft.OperationsManagement
+az provider register --namespace Microsoft.ApiManagement
+# 필요 시 추가
+az provider register --namespace Microsoft.Storage
+az provider register --namespace Microsoft.KeyVault
+az provider register --namespace Microsoft.Compute
+```
+
+**등록 완료 확인:** `az provider show --namespace <Namespace> --query "registrationState" -o tsv` → `Registered`가 나올 때까지 대기 후 배포 진행.
+
+---
+
+**정리:** PC에 Terraform 1.9+ 와 Azure CLI를 설치하고, `az login` 한 뒤, **위 Resource Provider를 구독에 등록**하고, 배포할 구독 ID를 각 스택의 `terraform.tfvars`에 넣으면 됩니다.
 
 ---
 
@@ -29,7 +180,11 @@
 
 - **두 저장소 역할**
   - **terraform-iac (이 저장소)**: 실제로 `terraform init / plan / apply`를 실행하는 **배포용** 저장소. 스택별 디렉터리, Backend 설정, 변수 파일이 여기 있음.
-  - **[terraform-modules](https://github.com/kimchibee/terraform-modules)**: 재사용 가능한 **공통 모듈**만 모음. terraform-iac의 각 스택이 `source = "git::...terraform-modules.git//terraform_modules/모듈명?ref=main"` 형태로 가져다 씀. **terraform-modules에서는 apply 하지 않음.**
+  - **[terraform-modules](https://github.com/kimchibee/terraform-modules) (GitHub)**: 재사용 가능한 **공통 모듈**만 모음. terraform-iac의 각 스택이 **반드시 GitHub**의 해당 레포만 `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=main"` 형태로 참조함. **terraform-modules에서는 apply 하지 않음.**
+
+- **불변 규칙 (절대 변경 금지)**
+  1. **공동 모듈 소스**: 모든 공통 모듈은 **modules GitHub**만 바라보도록 지정. GitLab/로컬 경로로 바꾸지 않음.
+  2. **AVM 사용**: azurerm이 필수적으로 필요한 케이스가 아닌 경우 **Azure Verified Module(AVM)** 을 사용함.
 
 - **스택이란**  
   `azure/dev/` 아래 **network**, **storage**, **shared-services**, **apim**, **ai-services**, **compute**, **connectivity** 처럼 **한 디렉터리 = 한 스택**입니다. 스택마다 별도 State 파일을 쓰므로, 한 스택만 배포·롤백할 수 있습니다.
@@ -38,8 +193,22 @@
   **1 → 2 → 3 → … → 7** 순서를 지켜야 합니다. (network → storage → shared-services → apim → ai-services → compute → connectivity)  
   뒤쪽 스택이 앞쪽 스택의 **출력(remote_state)**을 참조하기 때문입니다.
 
+- **한 블록씩 실행하는 배포 명령어**  
+  리소스 전부 삭제 후 처음부터 배포하거나, 단계별로 복사해 실행하려면 위 [스택 순서대로 배포하는 방법](#스택-순서대로-배포하는-방법)과 아래 [빠른 시작](#빠른-시작)·[배포 단계](#배포-단계)를 참고하세요. (Bootstrap → backend.hcl → 스택 1~7)
+
 - **설정 파일**  
   각 스택 디렉터리에는 `terraform.tfvars.example`이 있습니다. 복사해 `terraform.tfvars`로 만든 뒤, 구독 ID·리소스 이름 등만 채우면 됩니다.
+
+- **ai-services 스택: Azure OpenAI 모델 배포**  
+  Azure OpenAI **모델 배포**는 리전별 쿼터가 필요합니다. 쿼터 승인 전에는 **모델 관련 배포가 비활성화**되어 있으며(`openai_deployments = []`), **승인 후 재시도 시** `azure/dev/ai-services/terraform.tfvars`에서 해당 블록 주석을 해제하고 모델을 설정해야 합니다. 자세한 내용은 아래 [ai-services 스택: Azure OpenAI 쿼터 안내](#ai-services-스택-azure-openai-쿼터-안내) 및 [모델 없이 ai-services 배포](#모델-없이-ai-services-배포)를 참고하세요.
+
+- **레포 다운받은 후 필수 수정: Backend Storage 이름**  
+  Terraform state를 저장하는 **스토리지 계정 이름(storage_account_name)** 은 **Azure 전역 고유** 리소스입니다. 다른 사용자와 겹치면 생성이 실패하므로, `bootstrap/backend/terraform.tfvars`에서 **본인만의 고유명**(소문자·숫자 3~24자, 하이픈 불가)으로 반드시 수정하세요.  
+  → 상세: 위 [Backend Storage(State 저장소) 이름 수정](#backend-storagestate-저장소-이름-수정).
+
+- **공동 모듈 참조**  
+  **모든 스택**은 공통 모듈을 **terraform-modules 레포(Git)**만 참조합니다. 로컬 `modules/` 경로는 사용하지 않습니다.  
+  → **공동 모듈 수정이 필요할 때**: 위 [공동 모듈(terraform-modules) 수정이 필요할 때](#공동-모듈terraform-modules-수정이-필요할-때) 참고.
 
 ---
 
@@ -129,6 +298,36 @@ terraform-iac/
 | **ai-services** | Azure OpenAI, AI Foundry | network, storage, shared-services (remote_state) | 5 |
 | **compute** | Monitoring VM, Role Assignments (VM → Storage/Key Vault/Spoke Resources) | network, storage, ai-services (remote_state) | 6 |
 | **connectivity** | VNet Peering, Diagnostic Settings | network, storage, shared-services (remote_state) | 7 |
+
+### ai-services 스택: Azure OpenAI 쿼터 안내
+
+- **Azure OpenAI 모델 배포**는 구독·리전별 **쿼터**가 할당되어 있어야 생성할 수 있습니다. 쿼터가 없으면 `InsufficientQuota` 오류가 발생합니다.
+- **승인 시점이 불명확한 경우**를 위해, 현재는 **모델 관련 배포만 비활성화**해 두었습니다.  
+  - `azure/dev/ai-services/terraform.tfvars` 에서 `openai_deployments = []` 로 두고, 모델 블록은 주석 처리되어 있습니다.
+  - **쿼터 승인 후 재시도** 시에는 **반드시 아래를 수정**해야 합니다:  
+    1) `openai_deployments = []` 를 제거하고  
+    2) 주석 처리된 모델 블록을 해제한 뒤, 사용할 모델(`name`, `model_name`, `version`, `capacity`)로 설정  
+  - 쿼터 확인: `az cognitiveservices usage list --location koreacentral -o table`  
+  - 쿼터 요청: [https://aka.ms/oai/stuquotarequest](https://aka.ms/oai/stuquotarequest)
+
+### 모델 없이 ai-services 배포
+
+모델 배포 없이 **AI Foundry, Private Endpoints 등 나머지 리소스만** 먼저 배포하려면:
+
+1. **변수 확인**  
+   `azure/dev/ai-services/terraform.tfvars` 에서 `openai_deployments = []` 인지 확인합니다. (이미 비활성화되어 있으면 수정 불필요)
+
+2. **ai-services 스택 적용**  
+   ```bash
+   cd azure/dev/ai-services
+   terraform init -backend-config=backend.hcl
+   terraform plan -var-file=terraform.tfvars
+   terraform apply -var-file=terraform.tfvars
+   ```
+   이렇게 하면 Azure OpenAI **모델 배포**는 생성되지 않고, 스택에 정의된 그 외 리소스(AI Foundry, ACR, Private Endpoints, 진단 설정 등)만 배포됩니다.
+
+3. **나중에 쿼터 승인 후**  
+   위 [쿼터 안내](#ai-services-스택-azure-openai-쿼터-안내)대로 `terraform.tfvars` 에서 모델 블록을 활성화한 뒤, 다시 `terraform plan` / `terraform apply` 를 실행하면 모델 배포가 추가됩니다.
 
 ---
 
@@ -271,10 +470,12 @@ terraform apply -var-file=terraform.tfvars
 
 #### 6. AI Services 스택
 
+> **참고:** 쿼터 승인 전에는 `terraform.tfvars` / `terraform.tfvars.example` 에서 **모델 배포가 비활성화**되어 있습니다(`openai_deployments = []`). 이 상태로 apply 하면 **모델을 제외한 리소스**(AI Foundry, Private Endpoints 등)만 배포됩니다. 쿼터 승인 후 [위 안내](#ai-services-스택-azure-openai-쿼터-안내)대로 모델 블록을 활성화한 뒤 다시 apply 하면 됩니다.
+
 ```bash
 cd ../ai-services
 cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars 파일 수정
+# terraform.tfvars 파일 수정 (openai_deployments = [] 이면 모델 없이 배포)
 
 cat > backend.hcl <<EOF
 resource_group_name  = "terraform-state-rg"
@@ -288,10 +489,11 @@ terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
 ```
 
-**생성 리소스:**
-- Azure OpenAI (Cognitive Service)
-- AI Foundry (Azure Machine Learning Workspace)
-- Private Endpoints for AI Services
+**생성 리소스 (모델 비활성화 시):**
+- AI Foundry (Azure Machine Learning Workspace), Private Endpoints, 진단 설정 등 (Azure OpenAI **모델 배포** 제외)
+
+**쿼터 승인 후 모델 활성화 시 추가 생성:**
+- Azure OpenAI Cognitive Service 및 모델 배포(gpt-4o-mini 등)
 
 #### 7. Compute 스택
 
