@@ -47,6 +47,10 @@ provider "azurerm" {
     cognitive_account {
       purge_soft_delete_on_destroy = false
     }
+    resource_group {
+      # RG 삭제 시 내부 리소스(예: Azure 자동 생성 Action Group)가 있어도 Azure API로 RG 삭제 진행(연쇄 삭제)
+      prevent_deletion_if_contains_resources = false
+    }
   }
   subscription_id            = var.spoke_subscription_id
   skip_provider_registration = true

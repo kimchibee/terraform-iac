@@ -11,6 +11,7 @@ output "log_analytics_workspace_id" {
 output "log_analytics_workspace_name" {
   description = "Log Analytics Workspace name"
   value       = module.log_analytics_workspace.name
+  sensitive   = true
 }
 
 output "action_group_id" {

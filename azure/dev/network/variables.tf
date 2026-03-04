@@ -42,7 +42,7 @@ variable "hub_vnet_address_space" {
 }
 
 variable "hub_subnets" {
-  description = "Hub subnet configurations"
+  description = "Hub subnet configurations (keys must match subnet names in locals.tf)"
   type = map(object({
     address_prefixes                      = list(string)
     service_endpoints                     = optional(list(string), [])
@@ -63,7 +63,7 @@ variable "spoke_vnet_address_space" {
 }
 
 variable "spoke_subnets" {
-  description = "Spoke subnet configurations"
+  description = "Spoke subnet configurations (keys must match subnet names in locals.tf)"
   type = map(object({
     address_prefixes                      = list(string)
     service_endpoints                     = optional(list(string), [])

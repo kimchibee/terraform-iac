@@ -22,10 +22,10 @@ backend_resource_group_name = "terraform-state-rg"
 backend_storage_account_name = "terraformstate"
 backend_container_name = "tfstate"
 
-# VM Configuration
-vm_size          = "Standard_B2s"
+# VM Configuration (PEM 키로만 접근. Terraform이 SSH 키 쌍 생성 후 monitoring_vm_key.pem 저장)
+vm_size           = "Standard_B2s"
 vm_admin_username = "azureadmin"
-vm_admin_password = "YourSecurePassword123!"  # Replace with actual password
+# vm_ssh_private_key_filename = "monitoring_vm_key.pem"  # 기본값. 필요 시 변경
 
 # Feature Flags
 enable_monitoring_vm = true

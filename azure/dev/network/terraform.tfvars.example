@@ -32,13 +32,14 @@ hub_subnets = {
       actions      = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
     }
   }
-  "DNSResolver-Outbound" = {
-    address_prefixes = ["10.0.0.80/28"]
-    delegation = {
-      name         = "Microsoft.Network.dnsResolvers"
-      service_name = "Microsoft.Network/dnsResolvers"
-      actions      = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
-    }
+  "AzureFirewallSubnet" = {
+    address_prefixes = ["10.0.2.0/26"]
+  }
+  "AzureFirewallManagementSubnet" = {
+    address_prefixes = ["10.0.2.64/26"]
+  }
+  "AppGatewaySubnet" = {
+    address_prefixes = ["10.0.3.0/26"]
   }
   "Monitoring-VM-Subnet" = {
     address_prefixes  = ["10.0.1.0/24"]
@@ -73,5 +74,5 @@ vpn_gateway_type = "Vpn"
 # API Management - apim 스택에서 관리
 # Azure OpenAI - ai-services 스택에서 관리
 
-# Feature Flags
-enable_dns_forwarding_ruleset = true
+# Feature Flags (내부 주소 관리 전용이면 외부 포워딩 불필요)
+enable_dns_forwarding_ruleset = false

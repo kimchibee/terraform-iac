@@ -18,6 +18,9 @@ tfplan
 *.tfvars
 !terraform.tfvars.example
 
+# Compute stack: Terraform이 생성한 VM SSH 개인키 (절대 커밋 금지)
+**/monitoring_vm_key.pem
+
 # OS
 .DS_Store
 Thumbs.db

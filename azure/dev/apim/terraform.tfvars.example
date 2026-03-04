@@ -22,6 +22,7 @@ backend_storage_account_name = "terraformstate"
 backend_container_name = "tfstate"
 
 # API Management
-apim_sku_name     = "Developer"
+# Azure APIM sku_name: Developer_1, Basic_1, Standard_1, Premium_1 등
+apim_sku_name     = "Developer_1"
 apim_publisher_name  = "Your Name"
 apim_publisher_email = "your.email@example.com"
