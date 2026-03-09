@@ -68,8 +68,8 @@ module "spoke_vnet" {
   vnet_address_space = var.spoke_vnet_address_space
   subnets            = local.spoke_subnets
 
-  # Hub VNet Peering (같은 스택 내에서 직접 참조)
-  enable_hub_peering     = true
+  # Hub VNet Peering → connectivity 스택에서 Hub↔Spoke 양방향 관리
+  enable_hub_peering     = false
   hub_vnet_id            = module.hub_vnet.vnet_id
   hub_resource_group_name = module.hub_vnet.resource_group_name
 

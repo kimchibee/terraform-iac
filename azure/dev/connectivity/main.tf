@@ -44,7 +44,7 @@ data "terraform_remote_state" "shared_services" {
 }
 
 #--------------------------------------------------------------
-# VNet Peering: Hub to Spoke (공통 모듈 vnet-peering)
+# VNet Peering: Hub → Spoke (Hub 구독에서 생성)
 #--------------------------------------------------------------
 module "vnet_peering_hub_to_spoke" {
   source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet-peering?ref=main"
@@ -61,6 +61,26 @@ module "vnet_peering_hub_to_spoke" {
   allow_forwarded_traffic      = true
   allow_gateway_transit        = true
   use_remote_gateways          = false
+}
+
+#--------------------------------------------------------------
+# VNet Peering: Spoke → Hub (Spoke 구독에서 생성, network 스택에서 이동)
+#--------------------------------------------------------------
+module "vnet_peering_spoke_to_hub" {
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet-peering?ref=main"
+
+  providers = {
+    azurerm = azurerm.spoke
+  }
+
+  name                         = "${data.terraform_remote_state.network.outputs.spoke_vnet_name}-to-hub"
+  resource_group_name          = data.terraform_remote_state.network.outputs.spoke_resource_group_name
+  virtual_network_name         = data.terraform_remote_state.network.outputs.spoke_vnet_name
+  remote_virtual_network_id   = data.terraform_remote_state.network.outputs.hub_vnet_id
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  allow_gateway_transit        = false
+  use_remote_gateways          = true
 }
 
 #--------------------------------------------------------------

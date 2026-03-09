@@ -21,6 +21,14 @@ provider "azurerm" {
   alias                      = "hub"
 }
 
+# Spoke Subscription Provider (Spoke→Hub peering 생성용)
+provider "azurerm" {
+  features {}
+  subscription_id            = var.spoke_subscription_id
+  skip_provider_registration = true
+  alias                      = "spoke"
+}
+
 # Default provider (Hub)
 provider "azurerm" {
   features {}

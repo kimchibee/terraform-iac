@@ -6,7 +6,8 @@
 project_name = "test"
 
 # Subscription
-hub_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
 # Backend Configuration (for remote_state)
 backend_resource_group_name = "terraform-state-rg"

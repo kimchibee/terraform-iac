@@ -14,6 +14,11 @@ variable "hub_subscription_id" {
   type        = string
 }
 
+variable "spoke_subscription_id" {
+  description = "Spoke subscription ID (for Spoke→Hub peering)"
+  type        = string
+}
+
 # Backend Configuration (for remote_state)
 variable "backend_resource_group_name" {
   description = "Backend storage account resource group name"
