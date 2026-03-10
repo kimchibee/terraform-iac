@@ -70,12 +70,16 @@ module "apim" {
   subnet_id_apim     = data.terraform_remote_state.network.outputs.spoke_subnet_ids["apim-snet"]
   subnet_id_pep      = data.terraform_remote_state.network.outputs.spoke_subnet_ids["pep-snet"]
 
-  # Hub VNet (for peering)
+  # Hub VNet (for peering) — peering/DNS 링크는 connectivity에서 관리하므로 미생성
   hub_vnet_id             = data.terraform_remote_state.network.outputs.hub_vnet_id
   hub_vnet_name           = data.terraform_remote_state.network.outputs.hub_vnet_name
   hub_resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
   hub_monitoring_vm_subnet_id = data.terraform_remote_state.network.outputs.hub_subnet_ids["Monitoring-VM-Subnet"]
   hub_key_vault_id       = ""  # APIM은 Key Vault 불필요
+
+  enable_spoke_to_hub_peering  = var.enable_spoke_to_hub_peering
+  enable_private_dns_zone_links = var.enable_private_dns_zone_links
+  enable_pep_nsg               = var.enable_pep_nsg
 
   # Private DNS Zones (from network stack)
   private_dns_zone_ids = data.terraform_remote_state.network.outputs.hub_private_dns_zone_ids

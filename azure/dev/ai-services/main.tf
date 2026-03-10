@@ -70,15 +70,17 @@ module "ai_services" {
   subnet_id_apim     = data.terraform_remote_state.network.outputs.spoke_subnet_ids["apim-snet"]
   subnet_id_pep      = data.terraform_remote_state.network.outputs.spoke_subnet_ids["pep-snet"]
 
-  # Hub VNet (for peering)
-  hub_vnet_id             = data.terraform_remote_state.network.outputs.hub_vnet_id
-  hub_vnet_name           = data.terraform_remote_state.network.outputs.hub_vnet_name
-  hub_resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
+  # Hub (peering/DNS 링크는 network/connectivity에서 관리 → 인자 생략 가능)
   hub_monitoring_vm_subnet_id = data.terraform_remote_state.network.outputs.hub_subnet_ids["Monitoring-VM-Subnet"]
-  hub_key_vault_id       = data.terraform_remote_state.storage.outputs.key_vault_id
+  hub_key_vault_id           = data.terraform_remote_state.storage.outputs.key_vault_id
 
-  # Private DNS Zones (from network stack)
+  # Private DNS Zones (from network stack, PE 설정에 필요)
   private_dns_zone_ids = data.terraform_remote_state.network.outputs.hub_private_dns_zone_ids
+
+  # network/connectivity에서 이미 생성하므로 ai-services에서는 생성하지 않음
+  enable_spoke_to_hub_peering  = var.enable_spoke_to_hub_peering
+  enable_private_dns_zone_links = var.enable_private_dns_zone_links
+  enable_pep_nsg               = var.enable_pep_nsg
 
   # API Management - 비활성화 (apim 스택에서 관리)
   apim_name            = ""

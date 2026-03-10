@@ -5,6 +5,20 @@
 
 ---
 
+## 템플릿으로 사용할 때 (타인에게 전달)
+
+이 레포를 **템플릿**으로 공유해 다른 팀/환경에서 그대로 사용할 수 있습니다.
+
+| 항목 | 설명 |
+|------|------|
+| **필요 레포** | 1) **terraform-iac** (본 레포), 2) **terraform-modules** (공통 모듈 — `main.tf`에서 Git URL로 참조) |
+| **커밋하지 말 것** | `terraform.tfvars`, `backend.hcl` — 이미 `.gitignore` 대상. 실제 구독 ID·스토리지 계정명이 들어가면 안 됨. |
+| **전달 후 사용자가 할 일** | 1) `terraform.tfvars.example` → `terraform.tfvars` 복사 후 구독 ID 등 수정, 2) 각 스택에 `backend.hcl.example` → `backend.hcl` 복사 후 `storage_account_name` 수정, 3) Bootstrap 실행 후 스택 순서대로 배포 |
+
+배포 순서와 상세 절차는 아래 [스택 순서대로 배포하는 방법](#스택-순서대로-배포하는-방법)과 [빠른 시작](#빠른-시작)을 따르면 됩니다.
+
+---
+
 ## 처음 Terraform을 사용하는 사람을 위한 메뉴얼
 
 Terraform을 처음 쓰는 경우, 아래 순서대로 읽으면 **기초 개념 → 배포 → 검증 → 리소스 추가/변경/삭제**까지 한 번에 이해할 수 있습니다.
@@ -38,16 +52,17 @@ Terraform을 처음 쓰는 경우, 아래 순서대로 읽으면 **기초 개념
 
 **각 스택 공통 절차:**
 
-1. 해당 디렉터리로 이동: `cd azure/dev/<스택명>`
-2. 변수 파일 준비: `cp terraform.tfvars.example terraform.tfvars` 후 구독 ID 등 수정
-3. Backend 설정: `backend.hcl.example`을 복사해 `backend.hcl`로 만들고, Bootstrap에서 나온 `resource_group_name`, `storage_account_name`, `container_name` 입력
-4. 초기화 및 적용:
+1. **구독 ID**: 관리자가 **한 번만** 각 스택의 `terraform.tfvars`에 Hub/Spoke 구독 ID를 직접 입력하면 됩니다. 아래 [구독 ID 확인 및 입력](#구독-id-확인-및-입력) 참고.
+2. 해당 디렉터리로 이동: `cd azure/dev/<스택명>`
+3. 변수 파일 준비: `cp terraform.tfvars.example terraform.tfvars` 후 **구독 ID**와 나머지 값을 필요에 맞게 수정
+4. Backend 설정: 각 스택에서 `cp backend.hcl.example backend.hcl` 후 `storage_account_name`을 Bootstrap에서 쓴 값으로 수정. 또는 `scripts/generate-backend-hcl.sh` 실행
+5. 초기화 및 적용:
    ```bash
    terraform init -backend-config=backend.hcl
    terraform plan -var-file=terraform.tfvars
    terraform apply -var-file=terraform.tfvars
    ```
-5. apply 시 "Do you want to perform these actions?" 나오면 **yes** 입력
+6. apply 시 "Do you want to perform these actions?" 나오면 **yes** 입력
 
 상세한 단계별 명령어는 아래 [빠른 시작](#빠른-시작)과 [배포 단계](#배포-단계)를 참고하세요.
 
@@ -172,7 +187,7 @@ az provider register --namespace Microsoft.Compute
 
 ---
 
-**정리:** PC에 Terraform 1.9+ 와 Azure CLI를 설치하고, `az login` 한 뒤, **위 Resource Provider를 구독에 등록**하고, 배포할 구독 ID를 각 스택의 `terraform.tfvars`에 넣으면 됩니다.
+**정리:** PC에 Terraform 1.9+ 와 Azure CLI를 설치하고, `az login` 한 뒤, **위 Resource Provider를 구독에 등록**하고, **구독 ID**는 [구독 ID 확인 및 입력](#구독-id-확인-및-입력)대로 **각 스택의 terraform.tfvars에 한 번만 직접 입력**하면 됩니다.
 
 ---
 
@@ -333,6 +348,34 @@ terraform-iac/
 
 ## 빠른 시작
 
+### 구독 ID 확인 및 입력
+
+구독은 **Hub 1개, Spoke 1개**로 분리해 사용합니다. **구독 ID는 Terraform으로 생성하지 않고**, Azure Portal에서 만든 구독의 ID를 **관리자가 각 스택의 `terraform.tfvars`에 한 번만 직접 입력**하면 됩니다.
+
+**구독 ID 확인 방법**  
+`az account list` 등으로 사용할 구독 ID를 확인한 뒤, 각 스택의 `terraform.tfvars`(또는 `terraform.tfvars.example` 복사 후)에서 `hub_subscription_id`, `spoke_subscription_id` 필드에 넣으면 됩니다.
+
+- **현재 계정의 구독 목록** (이름, 구독 ID, 상태):
+  ```bash
+  az login
+  az account list --query "[].{Name:name, SubscriptionId:id, State:state, IsDefault:isDefault}" -o table
+  ```
+- **이름·ID만**:
+  ```bash
+  az account list --query "[].{name:name, id:id}" -o table
+  ```
+- **이름으로 검색**:
+  ```bash
+  az account list --query "[?contains(name, 'Hub')].{name:name, id:id}" -o table
+  az account list --query "[?contains(name, 'Spoke')].{name:name, id:id}" -o table
+  ```
+- **Azure Portal**: 구독(Subscriptions) → 사용할 구독 선택 → 개요의 **구독 ID**에서 복사.
+
+같은 구독 하나로 Hub/Spoke를 모두 쓰는 경우에는, **같은 구독 ID**를 `hub_subscription_id`와 `spoke_subscription_id` 둘 다에 넣으면 됩니다.
+
+**CI (GitLab, GitHub Actions 등)**  
+파이프라인에서는 구독 ID를 시크릿으로 두고 **TF_VAR_** 로 넘길 수 있습니다. terraform 실행 전에 `export TF_VAR_hub_subscription_id="<시크릿>"`, `export TF_VAR_spoke_subscription_id="<시크릿>"` 하면 환경변수 값이 변수로 적용됩니다.
+
 ### 필수 사전 준비
 
 1. **도구 설치**
@@ -373,18 +416,12 @@ terraform output
 
 #### 2. Network 스택 (최초 배포)
 
-```bash
-cd ../../azure/dev/network
-cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars 파일 수정 (구독 ID, 네트워크 설정 등)
+**구독 ID**는 [구독 ID 확인 및 입력](#구독-id-확인-및-입력)대로 각 스택의 `terraform.tfvars`에 직접 넣어 두면 됩니다. **backend.hcl**은 `./scripts/generate-backend-hcl.sh` 로 이미 생성되어 있다고 가정합니다.
 
-# Backend 설정 파일 생성
-cat > backend.hcl <<EOF
-resource_group_name  = "terraform-state-rg"
-storage_account_name = "terraformstate"
-container_name       = "tfstate"
-key                  = "azure/dev/network/terraform.tfstate"
-EOF
+```bash
+cd azure/dev/network
+cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars 에 hub_subscription_id, spoke_subscription_id 및 네트워크 설정 등 수정
 
 terraform init -backend-config=backend.hcl
 terraform plan -var-file=terraform.tfvars
@@ -1004,18 +1041,7 @@ terraform destroy -target=module.monitoring_vm -var-file=terraform.tfvars
 
 ## 모듈 구조
 
-### IaC 전용 모듈
-
-`modules/dev/` 디렉터리에 환경별 모듈이 있습니다:
-
-- `modules/dev/hub/vnet/` - Hub VNet 모듈
-- `modules/dev/hub/monitoring-storage/` - Storage 모듈
-- `modules/dev/hub/shared-services/` - Shared Services 모듈
-- `modules/dev/spoke/vnet/` - Spoke VNet 모듈
-
-### 공통 모듈
-
-공통 모듈은 **[terraform-modules](https://github.com/kimchibee/terraform-modules)** 레포에서 관리됩니다:
+모듈은 **[terraform-modules](https://github.com/kimchibee/terraform-modules)** 레포에서 관리됩니다:
 
 - `log-analytics-workspace` - Log Analytics Workspace
 - `virtual-machine` - Linux/Windows VM

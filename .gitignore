@@ -18,6 +18,9 @@ tfplan
 *.tfvars
 !terraform.tfvars.example
 
+# backend 설정 (스토리지 계정명 등 환경별 값 — 템플릿 사용 시 backend.hcl.example 복사 후 사용)
+backend.hcl
+
 # Compute stack: Terraform이 생성한 VM SSH 개인키 (절대 커밋 금지)
 **/monitoring_vm_key.pem
 
@@ -36,5 +39,6 @@ Thumbs.db
 *-resources*.json
 comparison-report.json
 
-# Shell scripts (test/check scripts)
+# Shell scripts (test/check scripts) — scripts/ 디렉터리 내 .sh 는 템플릿용으로 커밋
 *.sh
+!**/scripts/*.sh
