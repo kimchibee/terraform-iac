@@ -1,0 +1,24 @@
+#--------------------------------------------------------------
+# RBAC Stack Variables
+# compute 스택 적용 후 실행. Monitoring VM identity에 역할 부여
+#--------------------------------------------------------------
+
+project_name = "test"
+environment  = "dev"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Project     = "Azure-Hub-Spoke"
+}
+
+hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+backend_resource_group_name  = "terraform-state-rg"
+backend_storage_account_name = "YOUR_STORAGE_ACCOUNT_NAME"
+backend_container_name       = "tfstate"
+
+# compute 스택에서 Monitoring VM 사용 시 true. VM 비활성화 시 역할도 생성하지 않음
+enable_monitoring_vm_roles = true
+enable_key_vault_roles     = true

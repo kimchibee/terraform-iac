@@ -1,5 +1,0 @@
-# Backend 설정 예시. 복사 후 backend.hcl 로 저장하고 storage_account_name 을 본인 환경에 맞게 수정하세요.
-resource_group_name  = "terraform-state-rg"
-storage_account_name = "YOUR_STORAGE_ACCOUNT_NAME"
-container_name       = "tfstate"
-key                  = "azure/dev/ai-services/terraform.tfstate"

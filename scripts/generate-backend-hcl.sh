@@ -2,14 +2,18 @@
 #-----------------------------------------------------------------------------
 # Bootstrap의 terraform.tfvars에서 Backend 값을 읽어 각 스택 디렉터리에
 # backend.hcl 파일을 생성합니다.
-# 사용법: 프로젝트 루트에서 ./scripts/generate-backend-hcl.sh
+# - Bash 전제 (GitHub Actions, GitLab Runner 등 CI에서 bash로 실행)
+# - 로컬: 프로젝트 루트에서 ./scripts/generate-backend-hcl.sh
+# - CI: REPO_ROOT(또는 GITHUB_WORKSPACE/CI_PROJECT_DIR) 기준으로 실행 가능
 # (Bootstrap 적용 후 실행. bootstrap/backend/terraform.tfvars 가 있어야 함.)
 #-----------------------------------------------------------------------------
 
-set -e
+set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# GitHub Actions(GITHUB_WORKSPACE) / GitLab Runner(CI_PROJECT_DIR) 사용 시 해당 경로로 사용
+REPO_ROOT="${GITHUB_WORKSPACE:-${CI_PROJECT_DIR:-$REPO_ROOT}}"
 BOOTSTRAP_TFVARS="$REPO_ROOT/bootstrap/backend/terraform.tfvars"
 
 if [[ ! -f "$BOOTSTRAP_TFVARS" ]]; then
@@ -17,9 +21,9 @@ if [[ ! -f "$BOOTSTRAP_TFVARS" ]]; then
   exit 1
 fi
 
-# HCL key = "value" 형태에서 value 추출 (앞뒤 공백 제거)
+# HCL key = "value" 형태에서 value만 추출 (macOS/BSD sed 호환: [[:space:]] 사용)
 get_var() {
-  grep -E "^\s*${1}\s*=" "$BOOTSTRAP_TFVARS" | sed -E 's/.*=\s*"([^"]+)".*/\1/' | tr -d ' \r'
+  grep -E "^[[:space:]]*${1}[[:space:]]*=" "$BOOTSTRAP_TFVARS" | sed -nE 's/.*=[[:space:]]*"([^"]+)".*/\1/p' | tr -d ' \r'
 }
 
 resource_group_name=$(get_var "resource_group_name")
@@ -31,7 +35,7 @@ if [[ -z "$resource_group_name" || -z "$storage_account_name" || -z "$container_
   exit 1
 fi
 
-STACKS=(network storage shared-services apim ai-services compute connectivity)
+STACKS=(network storage shared-services apim ai-services compute rbac connectivity)
 DEV_DIR="$REPO_ROOT/azure/dev"
 
 for stack in "${STACKS[@]}"; do
@@ -42,6 +46,7 @@ for stack in "${STACKS[@]}"; do
     apim)            key="azure/dev/apim/terraform.tfstate" ;;
     ai-services)     key="azure/dev/ai-services/terraform.tfstate" ;;
     compute)         key="azure/dev/compute/terraform.tfstate" ;;
+    rbac)            key="azure/dev/rbac/terraform.tfstate" ;;
     connectivity)    key="azure/dev/connectivity/terraform.tfstate" ;;
     *)               echo "SKIP unknown stack: $stack" ; continue ;;
   esac
@@ -53,9 +58,9 @@ for stack in "${STACKS[@]}"; do
   fi
 
   hcl="$dir/backend.hcl"
+  # 이미 있으면 덮어쓰기 (Bootstrap 값으로 통일)
   if [[ -f "$hcl" ]]; then
-    echo "SKIP (이미 존재): $hcl"
-    continue
+    echo "OVERWRITE $hcl"
   fi
 
   cat > "$hcl" <<EOF

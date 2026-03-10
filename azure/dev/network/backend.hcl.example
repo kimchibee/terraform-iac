@@ -1,6 +1,0 @@
-# Backend 설정 예시. 복사 후 backend.hcl 로 저장하고 storage_account_name 을 본인 환경에 맞게 수정하세요.
-# terraform init -backend-config=backend.hcl
-resource_group_name  = "terraform-state-rg"
-storage_account_name = "YOUR_STORAGE_ACCOUNT_NAME"  # Bootstrap에서 생성한 스토리지 계정명 (전역 고유)
-container_name       = "tfstate"
-key                  = "azure/dev/network/terraform.tfstate"

@@ -1,5 +1,6 @@
 #--------------------------------------------------------------
-# Provider Configuration for Compute Stack
+# RBAC Stack — Monitoring VM용 역할 할당만 관리
+# compute 스택 적용 후 실행 (VM identity principal_id 참조)
 #--------------------------------------------------------------
 
 terraform {
@@ -10,14 +11,9 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.75.0"
     }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
-    }
   }
 }
 
-# Hub Subscription Provider
 provider "azurerm" {
   features {
     resource_group {
@@ -29,9 +25,17 @@ provider "azurerm" {
   alias                      = "hub"
 }
 
-# Default provider (Hub)
 provider "azurerm" {
-  features {}
-  subscription_id            = var.hub_subscription_id
+  features {
+    key_vault {
+      purge_soft_delete_on_destroy    = false
+      recover_soft_deleted_key_vaults = true
+    }
+    cognitive_account {
+      purge_soft_delete_on_destroy = false
+    }
+  }
+  subscription_id            = var.spoke_subscription_id
   skip_provider_registration = true
+  alias                      = "spoke"
 }

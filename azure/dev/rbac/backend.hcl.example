@@ -2,4 +2,4 @@
 resource_group_name  = "terraform-state-rg"
 storage_account_name = "YOUR_STORAGE_ACCOUNT_NAME"
 container_name       = "tfstate"
-key                  = "azure/dev/compute/terraform.tfstate"
+key                  = "azure/dev/rbac/terraform.tfstate"
