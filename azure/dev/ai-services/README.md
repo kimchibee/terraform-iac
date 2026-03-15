@@ -93,6 +93,7 @@ terraform apply -var-file=terraform.tfvars
 
 ---
 
-## 5. 참고
+## 6. 참고
 
 - `module.ai_services.azurerm_network_security_group.apim` / `azurerm_api_management.main` 이 plan에 있으면 **apim** 스택 리소스이므로 모듈 ref 또는 apim_name 설정을 확인하세요.
+- 이 스택은 하위 모듈 디렉터리 없이 루트에서 Git 모듈(spoke-workloads)만 참조합니다.

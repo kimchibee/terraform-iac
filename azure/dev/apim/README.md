@@ -92,7 +92,8 @@ terraform apply -var-file=terraform.tfvars
 
 ---
 
-## 5. 참고
+## 6. 참고
 
 - OpenAI, AI Foundry는 **ai-services** 스택에서 생성. 이 스택에는 나오면 안 됨.
 - VNet/서브넷은 **network** 스택에서 관리.
+- 이 스택은 하위 모듈 디렉터리 없이 루트에서 Git 모듈(spoke-workloads)만 참조합니다.
