@@ -21,7 +21,6 @@ tfplan
 
 # Backend 설정 (스토리지 계정·RG 이름 등 환경별 값 포함)
 **/backend.hcl
-
 # Compute stack: Terraform이 생성한 VM SSH 개인키 (절대 커밋 금지)
 **/monitoring_vm_key.pem
 **/vm_key.pem
@@ -45,3 +44,6 @@ comparison-report.json
 # Shell scripts (테스트/체크용만 제외; scripts/generate-backend-hcl.sh 는 커밋 유지)
 # *.sh
 maintfstatestorage
+
+# 문서 (로컬/원격 공통 제외)
+docs/
