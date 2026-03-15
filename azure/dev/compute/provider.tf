@@ -1,10 +1,9 @@
 #--------------------------------------------------------------
-# Provider Configuration for Compute Stack
+# Compute 루트 Provider
 #--------------------------------------------------------------
 
 terraform {
   required_version = "~> 1.5"
-
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -17,7 +16,6 @@ terraform {
   }
 }
 
-# Hub Subscription Provider
 provider "azurerm" {
   features {
     resource_group {
@@ -29,7 +27,6 @@ provider "azurerm" {
   alias                      = "hub"
 }
 
-# Default provider (Hub)
 provider "azurerm" {
   features {}
   subscription_id            = var.hub_subscription_id

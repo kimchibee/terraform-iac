@@ -11,6 +11,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.75.0"
     }
+    azuread = {
+      source  = "hashicorp/azuread"
+      version = "~> 2.45"
+    }
   }
 }
 
@@ -39,3 +43,6 @@ provider "azurerm" {
   skip_provider_registration = true
   alias                      = "spoke"
 }
+
+# Azure AD(Entra ID) — 그룹 멤버십 등록/변경/삭제용 (admin-users, ai-developer-users 모듈)
+provider "azuread" {}

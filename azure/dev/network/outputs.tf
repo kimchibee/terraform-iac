@@ -105,4 +105,32 @@ output "spoke_subnet_ids" {
   value       = module.spoke_vnet.subnet_ids
 }
 
+output "spoke_private_dns_zone_ids" {
+  description = "Map of Spoke-owned Private DNS Zone logical names to resource IDs (APIM, OpenAI, AI Foundry)"
+  value       = module.spoke_vnet.spoke_private_dns_zone_ids
+}
+
+output "spoke_private_dns_zone_names" {
+  description = "Map of Spoke-owned Private DNS Zone logical names to FQDNs"
+  value       = module.spoke_vnet.spoke_private_dns_zone_names
+}
+
+# 시나리오 3: keyvault-sg NSG ID (enable_keyvault_sg = true 일 때만)
+output "keyvault_sg_nsg_id" {
+  description = "Standalone keyvault-sg NSG ID"
+  value       = var.enable_keyvault_sg ? module.keyvault_sg[0].keyvault_sg_nsg_id : null
+}
+
+# PE 인바운드 1개 정책용 ASG ID — compute에서 Monitoring VM·Spoke Linux NIC에 application_security_group_ids 로 연결
+output "keyvault_clients_asg_id" {
+  description = "Key Vault 접근 허용 ASG ID. VM NIC에 붙이면 PE 쪽 인바운드 1개로 허용"
+  value       = var.enable_keyvault_sg && var.enable_pe_inbound_from_asg ? module.keyvault_sg[0].keyvault_clients_asg_id : null
+}
+
+# VM 타겟 단일 정책용 ASG ID — 접속 허용할 클라이언트 VM NIC에 application_security_group_ids 로 연결
+output "vm_allowed_clients_asg_id" {
+  description = "VM 접속 허용 클라이언트 ASG ID. 허용할 VM NIC에 붙이면 타겟 VM NSG 인바운드 1개 정책으로 접속 허용"
+  value       = var.enable_vm_access_sg ? module.vm_access_sg[0].vm_allowed_clients_asg_id : null
+}
+
 # APIM, OpenAI, AI Foundry는 각각의 스택에서 출력

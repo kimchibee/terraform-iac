@@ -16,10 +16,10 @@ tags = {
 # Subscription
 spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# Backend Configuration (for remote_state)
-backend_resource_group_name = "terraform-state-rg"
-backend_storage_account_name = "terraformstate"
-backend_container_name = "tfstate"
+# Backend (Bootstrap의 terraform.tfvars와 동일하게 맞출 것)
+backend_resource_group_name  = "terraform-state-rg"
+backend_storage_account_name = "tfstate07dc60"
+backend_container_name       = "tfstate"
 
 # API Management
 # Azure APIM sku_name: Developer_1, Basic_1, Standard_1, Premium_1 등

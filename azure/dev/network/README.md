@@ -1,99 +1,159 @@
-# Network 배포 가이드
+# Network
 
-Hub VNet, Spoke VNet, 서브넷, VPN Gateway, Private DNS Resolver, NSG 등을 관리하는 스택입니다. **선행 스택:** Bootstrap. **다음 스택:** storage.
+network 스택은 **이 디렉터리(루트)**에서만 `terraform plan` / `apply`를 실행합니다.  
+State 1개(`azure/dev/network/terraform.tfstate`), 하위 디렉터리(hub-vnet, spoke-vnet)는 **모듈**로만 호출합니다.
 
 ---
 
-## 1. 배포명령 가이드
-
-### a. 변수 파일 준비
+## 1. 배포 방식
 
 ```bash
-cd /Users/chi-sungkim/azure_ai/terraform-iac/azure/dev/network
+cd azure/dev/network
 cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars를 편집하여 아래 필수 항목을 채웁니다.
-```
-
-### b. terraform.tfvars에서 필수로 작성해야 할 내용
-
-| 변수명 | 설명 | 작성에 필요한 정보 / 출처 |
-|--------|------|----------------------------|
-| `project_name`, `environment`, `location`, `tags` | 공통 식별자·리전·태그 | 프로젝트 규칙. 예: `test`, `dev`, `Korea Central` |
-| `hub_subscription_id` | Hub 구독 ID | Azure Portal → **구독** → 구독 ID. 또는 `az account show --query id -o tsv` |
-| `spoke_subscription_id` | Spoke 구독 ID | 동일하게 Portal 또는 `az account list -o table` |
-| `backend_resource_group_name` | Backend RG 이름 | **Bootstrap** `terraform.tfvars`의 `resource_group_name` (예: `terraform-state-rg`) |
-| `backend_storage_account_name` | Backend 스토리지 계정 이름 | Bootstrap의 `storage_account_name` |
-| `backend_container_name` | Backend 컨테이너 이름 | Bootstrap의 `container_name` (기본 `tfstate`) |
-| `hub_vnet_address_space`, `hub_subnets` | Hub VNet·서브넷 정의 | 예시는 `terraform.tfvars.example` 참고. 주소 공간·서브넷 목록은 설계 문서 또는 예시 그대로 사용 후 필요 시 수정. |
-| `spoke_vnet_address_space`, `spoke_subnets` | Spoke VNet·서브넷 정의 | 동일. `apim-snet`, `pep-snet` 등 예시 참고. |
-
-### c. 배포 실행 순서
-
-```bash
-cd /Users/chi-sungkim/azure_ai/terraform-iac/azure/dev/network
+# terraform.tfvars 편집: 구독 ID, hub/spoke 주소 공간, 서브넷, backend 변수 등
 terraform init -backend-config=backend.hcl
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
 ```
 
----
-
-## 2. 현 스택에서 다루는 리소스
-
-네이밍: `locals.name_prefix = "${var.project_name}-x-x"` (예: `test-x-x`). 아래는 그 접두사 기준입니다.
-
-| 구분 | 리소스 종류 | 개수 | Azure 리소스 네이밍 / 비고 |
-|------|-------------|------|----------------------------|
-| Resource Group | Hub RG | 1 | `{project_name}-x-x-rg` |
-| Virtual Network | Hub VNet | 1 | `{project_name}-x-x-vnet`. 주소 공간: `var.hub_vnet_address_space` |
-| Subnet | Hub 서브넷 | 7 | GatewaySubnet, DNSResolver-Inbound, AzureFirewallSubnet, AzureFirewallManagementSubnet, AppGatewaySubnet, Monitoring-VM-Subnet, pep-snet. 이름은 `hub_subnets` 키 그대로. |
-| NSG | Monitoring VM | 1 | `{project_name}-monitoring-vm-nsg` |
-| NSG | Hub pep | 1 | `{project_name}-pep-nsg` |
-| Resource Group | Spoke RG | 1 | `{project_name}-x-x-spoke-rg` |
-| Virtual Network | Spoke VNet | 1 | `{project_name}-x-x-spoke-vnet` |
-| Subnet | Spoke 서브넷 | 2 | apim-snet, pep-snet |
-| NSG | Spoke pep | 1 | `{project_name}-spoke-pep-nsg` |
-| VPN Gateway | 공용 IP / Gateway / Local GW / Connection | 1세트 | `{project_name}-x-x-vpng` 등. `local_gateway_configs` 설정 시에만 연결 생성. |
-| Private DNS Resolver | Resolver / Inbound Endpoint | 1 | `{project_name}-x-x-pdr` |
-| Private DNS Zone | Zone + Hub 링크 | 다수 | `privatelink.*` 등. Zone 이름은 모듈 내 정의. |
-| Private DNS Zone | Spoke 링크 | 다수 | `{spoke_vnet_name}-link` |
-
-※ Peering은 **connectivity** 스택에서 생성합니다.
+- **선행 스택:** 없음 (최초 배포 스택 중 하나).  
+- **다음 스택:** storage, shared-services, apim, ai-services, compute 등이 이 스택 state를 참조합니다.
 
 ---
 
-## 3. 리소스 추가/생성/변경 시 메뉴얼
+## 2. 배포 과정 상세
 
-### 3.1 신규 리소스 추가 (예: 서브넷 1개 추가)
+### 2.1 명령어 (단계별)
 
-1. `terraform.tfvars`의 `hub_subnets` 또는 `spoke_subnets`에 새 키와 `address_prefixes` 등 객체를 추가합니다.  
-2. **hub-vnet / spoke-vnet 모듈**이 해당 키를 그대로 서브넷 이름으로 사용하므로, `locals`의 `hub_subnet_names` / `spoke_subnet_names`에 새 이름을 추가해야 합니다. (`network/locals.tf` 수정)  
-3. `terraform plan` → `apply`로 반영합니다.  
-4. **모듈에 없는 리소스 타입**(예: 새 종류의 Gateway)이 필요하면 **3.4**에 따라 terraform-modules 레포에 템플릿을 추가한 뒤, 이 스택에서 `init -upgrade` → plan → apply 합니다.
+```bash
+cd azure/dev/network
+cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars 편집: hub_subscription_id, spoke_subscription_id, hub_vnet_address_space, hub_subnets, spoke_*, backend 변수 등
+terraform init -backend-config=backend.hcl
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
+# apply 시 "yes" 입력하여 확정
+```
 
-### 3.2 기존 리소스 변경 (예: VNet 주소 공간, 서브넷 CIDR, VPN SKU)
+### 2.2 배포 시 처리 과정 (로그/데이터 흐름)
 
-1. `terraform.tfvars` 또는 `variables.tf` 기본값에서 해당 변수를 수정합니다.  
-2. `terraform plan -var-file=terraform.tfvars`로 변경 내용 확인 후 `terraform apply -var-file=terraform.tfvars`로 적용합니다.  
-3. 모듈 인자만 바꾸는 경우: 모듈이 해당 인자를 지원하면 그대로 적용. 지원하지 않으면 **3.4**에 따라 모듈 레포 수정 후 `init -upgrade` → plan → apply 합니다.
+`terraform apply` 실행 시 Terraform이 수행하는 흐름을 초심자 관점으로 정리합니다.
 
-### 3.3 기존 리소스 삭제
+| 단계 | 처리 내용 | 참조하는 값 (어디서 오는지) |
+|------|-----------|-----------------------------|
+| 1. Backend 초기화 | `backend.hcl`을 읽어 state 저장소(Azure Storage) 연결. state 키는 `azure/dev/network/terraform.tfstate`. | `backend.hcl`의 resource_group_name, storage_account_name, container_name, key |
+| 2. 변수 로드 | 루트 모듈의 변수에 값 채움. `-var-file=terraform.tfvars`로 전달된 값이 사용됨. | `terraform.tfvars` → `variables.tf`에 정의된 변수 |
+| 3. 구독 결정 | Hub 리소스(VNet, NSG 등)는 **Hub 구독**에, Spoke 리소스는 **Spoke 구독**에 생성됨. provider별로 구독이 나뉨. | `provider.tf`: `azurerm.hub` → `var.hub_subscription_id`, `azurerm.spoke` → `var.spoke_subscription_id` |
+| 4. locals 계산 | `main.tf`의 `locals` 블록 실행. name_prefix, hub_resource_group_name, hub_subnet_names, spoke_subnets 등 계산. | `var.project_name`, `var.hub_subnets`, `var.spoke_subnets` (tfvars에서 옴) |
+| 5. hub_vnet 모듈 | `module "hub_vnet"` 호출 → `./hub-vnet` 디렉터리 실행. Hub VNet, 서브넷, VPN Gateway, DNS Resolver, NSG(Monitoring-VM, pep) 등 생성. | `local.hub_resource_group_name`, `local.hub_subnets`, `var.hub_vnet_address_space` 등. 구독은 `azurerm.hub`(hub_subscription_id) |
+| 6. spoke_vnet 모듈 | `module "spoke_vnet"` 호출 → `./spoke-vnet` 실행. Spoke VNet, 서브넷(apim-snet, pep-snet), Hub와 피어링 생성. | `module.hub_vnet.vnet_id`, `module.hub_vnet.private_dns_zone_ids` 등. 구독은 `azurerm.spoke`(spoke_subscription_id) |
+| 7. keyvault_sg 모듈 (옵션) | `enable_keyvault_sg = true`일 때만. keyvault-sg NSG·규칙, PE 인바운드용 ASG 등 생성. | `var.enable_keyvault_sg`, `var.hub_nsg_keys_add_keyvault_rule`, `module.hub_vnet.nsg_pep_id` 등 |
+| 8. vm_access_sg 모듈 (옵션) | `enable_vm_access_sg = true`일 때만. vm-allowed-clients ASG 및 타겟 NSG 인바운드 규칙 생성. | `var.enable_vm_access_sg`, `var.vm_access_target_nsg_keys`, `module.hub_vnet.nsg_monitoring_vm_id` 등 |
+| 9. Output 기록 | `outputs.tf`에 정의된 값(hub_resource_group_name, hub_subnet_ids, keyvault_clients_asg_id 등)이 state에 기록됨. 다른 스택이 remote_state로 이 값을 읽음. | 각 모듈 output 및 루트 output |
 
-1. 제거할 서브넷: `hub_subnets` / `spoke_subnets`에서 해당 키를 제거하고, `locals`의 `*_subnet_names`에서도 제거합니다.  
-2. 리소스 블록을 직접 제거하는 경우: `main.tf` 또는 모듈 호출에서 제거(또는 주석 처리) 후 `terraform plan`으로 destroy 대상 확인 → `apply`로 삭제합니다.  
-3. state에서만 제거: `terraform state rm '주소'` (Azure 리소스는 수동 삭제).
+**정리:** 구독 ID는 `terraform.tfvars`의 `hub_subscription_id` / `spoke_subscription_id`로 정해지고, `provider.tf`에서 각 provider에 연결됩니다. VNet/서브넷 ID는 이 스택이 **직접 생성**하므로 외부 참조 없이, 루트의 `locals`와 `var.hub_subnets` 등으로 결정됩니다.
 
-### 3.4 공통 모듈(terraform-modules 레포) 수정이 필요한 경우
+### 2.3 terraform apply 시 파일 참조 순서
 
-**상황:** 신규 리소스(또는 옵션)가 필요한데, hub-vnet / spoke-vnet 등 공통 모듈에 해당 템플릿이 없음.
+Terraform이 설정을 읽고 리소스를 만드는 데 참조하는 파일·순서는 대략 다음과 같습니다.
 
-1. **terraform-modules 레포에서 작업**  
-   - 해당 모듈 디렉터리에서 리소스/변수 추가 또는 수정 후, 테스트용 `terraform plan`으로 확인합니다.  
-   - 변경 사항을 커밋하고 원격(예: `main`)에 push합니다.
+1. **backend.hcl** (init 시) — state 저장소 위치·키 결정.
+2. **provider.tf** — required_providers 및 provider 블록. 구독 ID는 여기서 사용하는 변수(`var.hub_subscription_id`, `var.spoke_subscription_id`)로 결정.
+3. **variables.tf** — 루트 모듈 변수 정의. 기본값이 있으면 여기서 지정.
+4. **terraform.tfvars** (또는 -var, -var-file) — 변수에 넣을 실제 값. variables.tf보다 **나중에** 적용되어 기본값을 덮어씀.
+5. **main.tf** — 진입점. `locals` 계산 후 `module "hub_vnet"`, `module "spoke_vnet"` 등 호출. **remote_state 데이터 소스는 이 스택에 없음**(선행 스택 없음).
+6. **./hub-vnet/** — `main.tf`의 `module "hub_vnet"`이 `source = "./hub-vnet"`로 참조. hub-vnet 내부의 `main.tf`, `variables.tf`, `versions.tf` 및 Git 모듈(terraform-modules) 참조.
+7. **./spoke-vnet/** — `module "spoke_vnet"`이 `source = "./spoke-vnet"`로 참조.
+8. **./keyvault-sg/** — `enable_keyvault_sg`일 때만 `module "keyvault_sg"`가 참조.
+9. **./vm-access-sg/** — `enable_vm_access_sg`일 때만 `module "vm_access_sg"`가 참조.
+10. **outputs.tf** — output 값 계산 후 state에 기록.
 
-2. **이 스택(network)에서 반드시 수행할 순서**  
-   - **업그레이드:** `terraform init -backend-config=backend.hcl -upgrade`  
-   - **플랜:** `terraform plan -var-file=terraform.tfvars`  
-   - **배포:** `terraform apply -var-file=terraform.tfvars`
+---
 
-3. 모듈 소스가 `git::...?ref=main`이면 `init -upgrade` 시 최신 `main`을 가져옵니다. 태그/브랜치를 쓰는 경우 해당 ref를 push한 뒤 동일한 순서(upgrade → plan → apply)를 따릅니다.
+## 3. 추가 가이드 (신규 Spoke VNet·서브넷 등 추가)
+
+**공통 절차 (신규 인스턴스 추가 시)**  
+(1) 예시 디렉터리 복사 → (2) 필요 시 새 디렉터리 내 기본값 수정 → (3) 루트 `main.tf`에 module 블록 추가 → (4) 루트 `variables.tf`에 변수 추가 → (5) `terraform.tfvars`에 값 설정 → (6) **이 스택 루트에서** `terraform plan -var-file=terraform.tfvars` → `apply`.
+
+- **신규 Spoke VNet 추가**  
+  1. `spoke-vnet` 디렉터리를 복사해 새 이름 생성 (예: `spoke-vnet-02`).  
+  2. 루트 `main.tf`에 `module "spoke_vnet_02" { source = "./spoke-vnet-02"; hub_vnet_id = module.hub_vnet.vnet_id; private_dns_zone_ids = module.hub_vnet.private_dns_zone_ids; ... }` 추가.  
+  3. 루트 `variables.tf`에 해당 스택용 변수 정의.  
+  4. `terraform.tfvars`에 값 설정.  
+  5. **이 스택 루트에서** `terraform plan -var-file=terraform.tfvars` → `apply`.
+
+- **Hub 쪽 리소스(서브넷·VPN 등) 추가**  
+  디렉터리 복사 없이 **변수·로컬만 반영**: 루트 `main.tf`의 `locals` 또는 `module "hub_vnet"` 인자, 그리고 `variables.tf`·`terraform.tfvars`에 반영 후 **이 스택 루트에서** plan → apply.  
+  공통 모듈(hub-vnet)에 인자가 없으면 terraform-modules 레포에 반영 후 `terraform init -upgrade` → plan → apply.
+
+- **시나리오 3: keyvault-sg (Key Vault 접근 허용 NSG)**  
+  1. `terraform.tfvars`에서 `enable_keyvault_sg = true` 설정.  
+  2. **기존 Hub NSG에 규칙만 추가**할 때: `hub_nsg_keys_add_keyvault_rule = ["monitoring_vm"]` (또는 `["pep"]`, `["monitoring_vm", "pep"]`).  
+  3. **Standalone keyvault-sg NSG를 서브넷에 연결**할 때: `hub_subnet_names_attach_keyvault_sg = ["서브넷이름"]` (이미 다른 NSG가 붙어 있는 서브넷에는 사용 불가 — Azure는 서브넷당 NSG 1개).  
+  4. **이 스택 루트에서** `terraform plan -var-file=terraform.tfvars` → `apply`.  
+  - **Key Vault PE 위치:** storage 스택의 monitoring-storage 모듈이 Hub VNet **pep-snet**에 Key Vault Private Endpoint를 생성.  
+  - **UDR:** PE가 동일 VNet(Hub)에 있으므로 Hub 내 서브넷은 별도 UDR 없이 라우팅됨. Spoke → Hub Key Vault 접근은 VNet 피어링으로 처리.
+
+- **한 정책으로 Monitoring VM + Spoke Linux 허용 (다른 VNet)**  
+  - **인바운드 1개:** 소스 = 시큐리티 그룹(ASG), 포트 443.  
+  - `enable_pe_inbound_from_asg = true` 로 두면, keyvault-clients ASG가 생성되고 **PE(pep-snet) NSG에 인바운드 규칙 1개**가 추가됨.  
+  - Network 스택 output `keyvault_clients_asg_id`를 compute 스택으로 전달한 뒤, **Monitoring VM·Spoke Linux VM NIC**에 `application_security_group_ids = [keyvault_clients_asg_id]` 로 붙이면, **정책 1개**로 둘 다 Key Vault 접근 가능.  
+  - 자세한 설명: `docs/SCENARIO3_KEYVAULT_ACCESS_POLICY.md` 참고.
+
+- **VM 타겟 단일 방화벽 정책 (ASG)**  
+  - **일반 VM**에 접속 허용할 클라이언트를 ASG 하나로 묶고, 타겟 VM NSG에 **인바운드 1개**(소스=ASG, 포트 22/3389 등)만 두면 VNet 무관 단일 정책.  
+  - `enable_vm_access_sg = true`, `vm_access_target_nsg_keys = ["monitoring_vm"]` (Hub 타겟), 필요 시 `vm_access_target_nsg_ids_spoke = ["/subscriptions/.../nsg-id"]` (Spoke 타겟).  
+  - output `vm_allowed_clients_asg_id`를 **접속 허용할 클라이언트 VM** NIC에 `application_security_group_ids` 로 붙임.  
+  - NSG/ASG 관리 위치 의견: `docs/NETWORK_SECURITY_MANAGEMENT_OPINION.md` 참고 (RBAC가 아닌 network 스택 권장).
+
+---
+
+## 4. 변경 가이드 (기존 리소스 수정)
+
+- **주소 공간·서브넷·VPN 설정 등**  
+  `terraform.tfvars`(및 필요 시 `variables.tf`)에서 `hub_vnet_address_space`, `hub_subnets`, `spoke_vnet_address_space`, `spoke_subnets`, `vpn_gateway_sku` 등 수정 후  
+  `terraform plan -var-file=terraform.tfvars`로 확인 → `terraform apply -var-file=terraform.tfvars`로 적용.
+
+- **이름·로컬 값 변경**  
+  루트 `main.tf`의 `locals` 또는 모듈 인자 수정 후 plan → apply.
+
+- **keyvault-sg(시나리오 3) 변경**  
+  `hub_nsg_keys_add_keyvault_rule`, `hub_subnet_names_attach_keyvault_sg` 수정 후 plan → apply.
+
+- **vm-access-sg 변경**  
+  `vm_access_target_nsg_keys`, `vm_access_target_nsg_ids_spoke`, `vm_access_destination_ports` 수정 후 plan → apply.
+
+- 일부 변경은 리소스 **replace**를 유발할 수 있으므로 plan 결과를 확인한 뒤 적용합니다.
+
+---
+
+## 5. 삭제 가이드 (리소스 제거)
+
+- **Spoke VNet 하나 제거**  
+  1. 루트 `main.tf`에서 해당 `module "spoke_vnet_xx" { ... }` 블록 삭제.  
+  2. 관련 변수·output 제거 또는 주석 처리.  
+  3. `terraform plan` → `apply`로 destroy 적용.  
+  4. (선택) 해당 하위 디렉터리 삭제.
+
+- **Hub VNet 제거**  
+  다른 스택이 hub 출력을 참조하므로, 선행하여 해당 스택들(storage, compute, connectivity 등)을 정리한 뒤 network에서 제거합니다.
+
+- **keyvault-sg(시나리오 3) 비활성화**  
+  `enable_keyvault_sg = false`로 설정 후 plan → apply. 기존 NSG에 추가된 Allow KeyVault 규칙은 수동 삭제하거나, 규칙만 제거하려면 `hub_nsg_keys_add_keyvault_rule = []`로 비운 뒤 apply.
+
+- **vm-access-sg 비활성화**  
+  `enable_vm_access_sg = false`로 설정 후 plan → apply. 기존 타겟 NSG에 추가된 AllowVMClients 규칙은 수동 삭제 가능.
+
+- **state에서만 제거**  
+  `terraform state rm 'module.xxx'` 사용 (Azure 리소스는 그대로 둘 때만).
+
+---
+
+## 6. 하위 모듈
+
+| 디렉터리 | 역할 |
+|----------|------|
+| **hub-vnet/** | Hub VNet, VPN Gateway, DNS Resolver 등 (Git hub-vnet 래핑) |
+| **spoke-vnet/** | Spoke VNet (Git spoke-vnet 래핑, Hub 출력을 변수로 수신) |
+| **keyvault-sg/** | 시나리오 3: Key Vault(443) 아웃바운드 허용 NSG 규칙 (standalone NSG 또는 기존 Hub NSG에 규칙 추가) |
+| **vm-access-sg/** | VM 타겟 단일 정책: ASG + 타겟 VM NSG 인바운드(소스=ASG, 22/3389 등). 클라이언트 NIC에 ASG 붙이면 VNet 무관 허용 |

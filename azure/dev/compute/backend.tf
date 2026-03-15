@@ -1,9 +1,9 @@
 #--------------------------------------------------------------
-# Backend Configuration for Compute Stack
+# Compute 루트 Backend (State 1개)
+# key: azure/dev/compute/terraform.tfstate
 #--------------------------------------------------------------
 terraform {
   backend "azurerm" {
-    # Backend 설정은 terraform init 시 -backend-config로 전달
-    # key = "azure/dev/compute/terraform.tfstate"
+    # init 시 -backend-config=backend.hcl
   }
 }

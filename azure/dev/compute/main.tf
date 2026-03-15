@@ -1,11 +1,9 @@
 #--------------------------------------------------------------
-# Compute Stack
-# Monitoring VM만 생성. 역할 할당은 rbac 스택에서 관리
+# Compute Stack (루트)
+# 하위 디렉터리(linux-monitoring-vm, windows-example 등)를 모듈로 호출.
+# 신규 VM 추가: 디렉터리 복사 후 여기 module 블록 + variables 추가
 #--------------------------------------------------------------
 
-#--------------------------------------------------------------
-# Network Stack Remote State (Hub RG, Subnet)
-#--------------------------------------------------------------
 data "terraform_remote_state" "network" {
   backend = "azurerm"
   config = {
@@ -16,71 +14,59 @@ data "terraform_remote_state" "network" {
   }
 }
 
-#--------------------------------------------------------------
-# Monitoring VM용 SSH 키 쌍 생성 (PEM 키로만 접근)
-# apply 시 키가 생성되고, 개인키는 vm_ssh_private_key_path 경로에 저장됨
-#--------------------------------------------------------------
-resource "tls_private_key" "vm_ssh" {
-  count     = var.enable_monitoring_vm ? 1 : 0
-  algorithm = "RSA"
-  rsa_bits  = 2048
-}
-
-resource "local_file" "vm_private_key_pem" {
-  count           = var.enable_monitoring_vm ? 1 : 0
-  content         = tls_private_key.vm_ssh[0].private_key_pem
-  filename        = "${path.module}/${var.vm_ssh_private_key_filename}"
-  file_permission = "0600"
+locals {
+  name_prefix = "${var.project_name}-x-x"
+  hub_rg      = data.terraform_remote_state.network.outputs.hub_resource_group_name
+  hub_subnet  = data.terraform_remote_state.network.outputs.hub_subnet_ids["Monitoring-VM-Subnet"]
+  # Network 스택 방화벽 정책(ASG): 변수명(키) → output ID 매핑. ID 직접 조회 없이 키만 지정
+  asg_id_by_key = {
+    "keyvault_clients"   = try(data.terraform_remote_state.network.outputs.keyvault_clients_asg_id, null)
+    "vm_allowed_clients" = try(data.terraform_remote_state.network.outputs.vm_allowed_clients_asg_id, null)
+  }
 }
 
 #--------------------------------------------------------------
-# Monitoring VM (공통 모듈 virtual-machine) — SSH 키 인증만 사용
+# Linux Monitoring VM (rbac/storage 가 이 VM Identity 참조)
 #--------------------------------------------------------------
-module "monitoring_vm" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=main"
-  count  = var.enable_monitoring_vm ? 1 : 0
+module "linux_monitoring_vm" {
+  source = "./linux-monitoring-vm"
 
   providers = {
     azurerm = azurerm.hub
   }
 
-  name                   = local.hub_vm_name
-  os_type                = "linux"
-  size                   = var.vm_size
-  location               = var.location
-  resource_group_name    = data.terraform_remote_state.network.outputs.hub_resource_group_name
-  subnet_id              = data.terraform_remote_state.network.outputs.hub_subnet_ids["Monitoring-VM-Subnet"]
-  admin_username         = var.vm_admin_username
-  admin_password         = ""  # PEM 키로만 접근
-  admin_ssh_public_key   = tls_private_key.vm_ssh[0].public_key_openssh
-  tags                   = var.tags
-  enable_identity        = true
-  # 모니터링 에이전트는 항상 포함. 커스텀 키 디스크 암호화(ADE)는 아래 주석 블록 참고 후 필요 시 활성화
-  vm_extensions = [
-    { name = "AzureMonitorLinuxAgent", publisher = "Microsoft.Azure.Monitor", type = "AzureMonitorLinuxAgent", type_handler_version = "1.0", auto_upgrade_minor_version = true, settings = {}, protected_settings = {} }
-    # ---------------------------------------------------------------------------
-    # [선택] Azure Disk Encryption (Linux) — 커스텀 키(Key Vault)로 OS/디스크 암호화
-    # 사용 전: 1) storage 스택에 Key Vault 생성 및 key_vault_id, key_vault_uri 출력 확인
-    #         2) Key Vault 액세스 정책: VM용 "Disk Encryption" 또는 RBAC(Key Vault Crypto User) 부여
-    #         3) 아래 주석 해제 후 KeyVaultURL/KeyVaultResourceId 설정
-    #            storage 스택 Key Vault 사용 시 예: try(data.terraform_remote_state.storage.outputs.key_vault_uri, ""), key_vault_id
-    # ---------------------------------------------------------------------------
-    # {
-    #   name                     = "AzureDiskEncryptionForLinux"
-    #   publisher                = "Microsoft.Azure.Security"
-    #   type                     = "AzureDiskEncryptionForLinux"
-    #   type_handler_version     = "1.4"
-    #   auto_upgrade_minor_version = true
-    #   settings = {
-    #     VolumeType          = "All"   # "OS" | "Data" | "All"
-    #     EncryptionOperation = "EnableEncryption"
-    #     KeyVaultURL         = "https://<vault-name>.vault.azure.net/"
-    #     KeyVaultResourceId  = "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.KeyVault/vaults/<vault-name>"
-    #     # KEK(Key Encryption Key) 사용 시 추가
-    #     # KeyEncryptionKeyURL    = "https://<vault>.vault.azure.net/keys/<key-name>/<version>"
-    #     # KeyEncryptionAlgorithm = "RSA-OAEP"
-    #   }
-    #   protected_settings = {}
-    # }
-  ]
+  resource_group_name     = local.hub_rg
+  subnet_id               = local.hub_subnet
+  location                = var.location
+  vm_name                 = "${local.name_prefix}-${var.linux_monitoring_vm_name}"
+  vm_size                 = var.linux_monitoring_vm_size
+  admin_username          = var.linux_monitoring_vm_admin_username
+  tags                    = var.tags
+  vm_extensions           = var.linux_monitoring_vm_extensions
+  ssh_private_key_filename = var.linux_monitoring_vm_ssh_key_filename
+  enable_vm               = var.linux_monitoring_vm_enable
+  application_security_group_ids = [for k in coalesce(var.linux_monitoring_vm_application_security_group_keys, var.application_security_group_keys) : local.asg_id_by_key[k] if try(local.asg_id_by_key[k], null) != null]
+}
+
+#--------------------------------------------------------------
+# Windows VM 예시
+#--------------------------------------------------------------
+module "windows_example" {
+  source = "./windows-example"
+
+  providers = {
+    azurerm = azurerm.hub
+  }
+
+  resource_group_name = local.hub_rg
+  subnet_id           = local.hub_subnet
+  location            = var.location
+  vm_name             = "${local.name_prefix}-${var.windows_example_vm_name}"
+  vm_size             = var.windows_example_vm_size
+  admin_username      = var.windows_example_admin_username
+  admin_password      = var.windows_example_admin_password
+  tags                = var.tags
+  vm_extensions       = var.windows_example_vm_extensions
+  enable_vm           = var.windows_example_enable
+  application_security_group_ids = [for k in coalesce(var.windows_example_application_security_group_keys, var.application_security_group_keys) : local.asg_id_by_key[k] if try(local.asg_id_by_key[k], null) != null]
 }

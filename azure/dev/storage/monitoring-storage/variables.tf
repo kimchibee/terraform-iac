@@ -1,0 +1,12 @@
+variable "project_name" { type = string }
+variable "environment" { type = string }
+variable "location" { type = string }
+variable "tags" { type = map(string) }
+variable "resource_group_name" { type = string }
+variable "key_vault_name" { type = string }
+variable "monitoring_vm_subnet_id" { type = string }
+variable "pep_subnet_id" { type = string }
+variable "private_dns_zone_ids" { type = map(string) }
+variable "enable_key_vault" { type = bool }
+variable "monitoring_vm_identity_principal_id" { type = string }
+variable "enable_monitoring_vm" { type = bool }

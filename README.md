@@ -40,13 +40,13 @@
 
 ```
 terraform-iac/
-├── azure/dev/                    # 스택별 배포 디렉터리 (각각 별도 State)
-│   ├── network/                  # Hub/Spoke VNet, VPN Gateway, DNS Resolver, NSG
-│   ├── storage/                  # Key Vault, Monitoring Storage, Private Endpoints
-│   ├── shared-services/          # Log Analytics, Solutions, Action Group, Dashboard
+├── azure/dev/                    # 스택별 배포 디렉터리 (스택당 State 1개, 루트에서 plan/apply)
+│   ├── network/                  # hub-vnet/, spoke-vnet/ 하위 모듈
+│   ├── storage/                  # monitoring-storage/ 하위 모듈
+│   ├── shared-services/         # log-analytics-workspace/, shared-services/ 하위 모듈
 │   ├── apim/                     # API Management
-│   ├── ai-services/               # Azure OpenAI, AI Foundry
-│   ├── compute/                  # Monitoring VM
+│   ├── ai-services/              # Azure OpenAI, AI Foundry
+│   ├── compute/                  # linux-monitoring-vm/, windows-example/ 하위 모듈 (VM 추가 시 디렉터리 복사 + 루트에 module·변수 추가)
 │   ├── rbac/                     # Monitoring VM → Hub/Spoke 역할 할당
 │   └── connectivity/             # VNet Peering (Hub↔Spoke), 진단 설정
 ├── bootstrap/backend/            # Backend용 Storage Account·Container (최초 1회)
@@ -55,13 +55,16 @@ terraform-iac/
 └── config/                       # (선택) 정책·설정 파일
 ```
 
-- 각 스택 디렉터리에는 `main.tf`, `variables.tf`, `terraform.tfvars.example`, `backend.tf` 등이 있으며, `backend.hcl`은 **Bootstrap 적용 후 스크립트로 생성**합니다.
+- 각 스택은 **루트**에 `main.tf`, `variables.tf`, `backend.tf`, `provider.tf` 등이 있고, **하위 디렉터리는 모듈**로만 사용(backend/remote_state 없음). 신규 리소스 추가 시: 예시 디렉터리 복사 → 루트 main.tf에 module 추가 → variables/terraform.tfvars에 변수 추가. `backend.hcl`은 **Bootstrap 적용 후 스크립트로 생성**합니다.
 
 ---
 
 ## 3. 초기 배포 작업 순서
 
 전체 흐름: **Bootstrap → backend.hcl 생성 스크립트 실행 → 각 스택을 순서대로 배포**합니다.
+
+- **점검 기준표**: 배포하면서 스택별로 검증할 항목은 [`docs/DEPLOYMENT_VERIFICATION_CHECKLIST.md`](docs/DEPLOYMENT_VERIFICATION_CHECKLIST.md) 참고.
+- **배포 순서별 명령어**: 복사·실행용 명령어 목록은 [`docs/DEPLOYMENT_COMMANDS.md`](docs/DEPLOYMENT_COMMANDS.md) 참고.
 
 ### 3.0 사전 준비
 
@@ -147,8 +150,8 @@ az provider show --namespace Microsoft.OperationalInsights --query "registration
 | 3 | shared-services | `azure/dev/shared-services` | Log Analytics, Solutions, Action Group, Dashboard |
 | 4 | apim | `azure/dev/apim` | API Management |
 | 5 | ai-services | `azure/dev/ai-services` | Azure OpenAI, AI Foundry (모델은 3.3 참고) |
-| 6 | compute | `azure/dev/compute` | Monitoring VM |
-| 7 | rbac | `azure/dev/rbac` | Monitoring VM 역할 할당 |
+| 6 | compute | `azure/dev/compute/linux-monitoring-vm` (및 기타 VM 디렉터리) | VM 디렉터리 단위 1대씩 (Linux 예: linux-monitoring-vm, Windows 예: windows-example) |
+| 7 | rbac | `azure/dev/rbac` | Monitoring VM(linux-monitoring-vm) 역할 할당 |
 | 8 | connectivity | `azure/dev/connectivity` | VNet Peering, 진단 설정 |
 
 **각 스택 공통 절차:**

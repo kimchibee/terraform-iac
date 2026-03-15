@@ -16,10 +16,10 @@ tags = {
 # Subscription
 spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# Backend Configuration (for remote_state)
-backend_resource_group_name = "terraform-state-rg"
-backend_storage_account_name = "terraformstate"
-backend_container_name = "tfstate"
+# Backend (Bootstrap의 terraform.tfvars와 동일하게 맞출 것)
+backend_resource_group_name  = "terraform-state-rg"
+backend_storage_account_name = "tfstate07dc60"
+backend_container_name       = "tfstate"
 
 # ---------------------------------------------------------------------------
 # Azure OpenAI 모델 배포 — 쿼터 승인 전에는 비활성화(빈 목록), 승인 후 수정 필요

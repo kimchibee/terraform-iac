@@ -36,6 +36,8 @@ if [[ -z "$resource_group_name" || -z "$storage_account_name" || -z "$container_
 fi
 
 STACKS=(network storage shared-services apim ai-services compute rbac connectivity)
+# compute 하위는 모듈로만 사용. backend는 compute 루트 1개
+COMPUTE_SUBDIRS=(linux-monitoring-vm windows-example)
 DEV_DIR="$REPO_ROOT/azure/dev"
 
 for stack in "${STACKS[@]}"; do
@@ -58,11 +60,31 @@ for stack in "${STACKS[@]}"; do
   fi
 
   hcl="$dir/backend.hcl"
-  # 이미 있으면 덮어쓰기 (Bootstrap 값으로 통일)
   if [[ -f "$hcl" ]]; then
     echo "OVERWRITE $hcl"
   fi
 
+  cat > "$hcl" <<EOF
+resource_group_name  = "$resource_group_name"
+storage_account_name = "$storage_account_name"
+container_name       = "$container_name"
+key                  = "$key"
+EOF
+  echo "CREATED $hcl"
+done
+
+# compute 하위 디렉터리별 backend.hcl (디렉터리 단위 VM 관리)
+for sub in "${COMPUTE_SUBDIRS[@]}"; do
+  dir="$DEV_DIR/compute/$sub"
+  if [[ ! -d "$dir" ]]; then
+    echo "SKIP (디렉터리 없음): $dir"
+    continue
+  fi
+  key="azure/dev/compute/$sub/terraform.tfstate"
+  hcl="$dir/backend.hcl"
+  if [[ -f "$hcl" ]]; then
+    echo "OVERWRITE $hcl"
+  fi
   cat > "$hcl" <<EOF
 resource_group_name  = "$resource_group_name"
 storage_account_name = "$storage_account_name"

@@ -76,3 +76,19 @@ vpn_gateway_type = "Vpn"
 
 # Feature Flags (내부 주소 관리 전용이면 외부 포워딩 불필요)
 enable_dns_forwarding_ruleset = false
+
+# 시나리오 3: keyvault-sg — Key Vault 접근 허용 NSG
+# Key Vault PE는 storage 스택에서 Hub pep-snet 사용. 이 NSG 규칙으로 해당 서브넷/리소스에서 KV(443) 아웃바운드 허용
+# enable_keyvault_sg = true
+# hub_subnet_names_attach_keyvault_sg = []   # NSG가 없는 Hub 서브넷에 standalone keyvault-sg NSG 연결 시 서브넷 이름 목록
+# hub_nsg_keys_add_keyvault_rule = ["monitoring_vm"]   # 기존 Hub NSG에 Allow KeyVault 아웃바운드 규칙 추가 (monitoring_vm, pep)
+# 한 정책으로 Monitoring VM + Spoke Linux 허용(다른 VNet): PE 쪽 인바운드 1개(소스=ASG, 443). output keyvault_clients_asg_id를 VM NIC에 붙임
+# enable_pe_inbound_from_asg = true
+# keyvault_clients_asg_name = "keyvault-clients-asg"
+
+# VM 타겟 단일 정책 (ASG): 타겟 VM NSG 인바운드 = 소스 ASG, 포트 22/3389. output vm_allowed_clients_asg_id를 클라이언트 VM NIC에 붙임
+# enable_vm_access_sg = true
+# vm_allowed_clients_asg_name = "vm-allowed-clients-asg"
+# vm_access_target_nsg_keys = ["monitoring_vm"]
+# vm_access_target_nsg_ids_spoke = []
+# vm_access_destination_ports = ["22", "3389"]

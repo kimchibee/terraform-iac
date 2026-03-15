@@ -1,13 +1,8 @@
 #--------------------------------------------------------------
-# Shared Services Stack
-# Log Analytics Workspace와 Shared Services를 관리하는 스택
-# AWS 방식: network 스택의 remote_state를 읽어서 의존성 해결
+# Shared Services Stack (루트)
+# log-analytics-workspace, shared-services 는 하위 모듈로 호출
 #--------------------------------------------------------------
 
-#--------------------------------------------------------------
-# Network Stack Remote State
-# network 스택의 출력을 읽어서 사용
-#--------------------------------------------------------------
 data "terraform_remote_state" "network" {
   backend = "azurerm"
   config = {
@@ -18,16 +13,14 @@ data "terraform_remote_state" "network" {
   }
 }
 
-#--------------------------------------------------------------
-# Log Analytics Workspace (공통 모듈) — 소스는 modules 레포만 사용
-#--------------------------------------------------------------
+locals {
+  name_prefix           = "${var.project_name}-x-x"
+  hub_log_analytics_name = "${local.name_prefix}-law"
+}
+
 module "log_analytics_workspace" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=avm-1.0.0"
-
-  providers = {
-    azurerm = azurerm.hub
-  }
-
+  source = "./log-analytics-workspace"
+  providers = { azurerm = azurerm.hub }
   name                = local.hub_log_analytics_name
   location            = var.location
   resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
@@ -35,16 +28,9 @@ module "log_analytics_workspace" {
   tags                = var.tags
 }
 
-#--------------------------------------------------------------
-# Shared Services: Solutions / Action Group / Dashboard (IaC 모듈)
-#--------------------------------------------------------------
 module "shared_services" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/shared-services?ref=main"
-
-  providers = {
-    azurerm = azurerm.hub
-  }
-
+  source = "./shared-services"
+  providers = { azurerm = azurerm.hub }
   enable                      = var.enable_shared_services
   resource_group_name         = data.terraform_remote_state.network.outputs.hub_resource_group_name
   log_analytics_workspace_id   = module.log_analytics_workspace.id

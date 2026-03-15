@@ -1,8 +1,9 @@
 #--------------------------------------------------------------
-# Compute Stack Variables
+# Compute 루트 변수 예시
+# cp terraform.tfvars.example terraform.tfvars 후 수정
+# 신규 VM 스택 추가 시: main.tf 에 module 블록 추가 + 여기/ variables.tf 에 변수 추가
 #--------------------------------------------------------------
 
-# General
 project_name = "test"
 environment  = "dev"
 location     = "Korea Central"
@@ -13,20 +14,31 @@ tags = {
   Project     = "Azure-Hub-Spoke"
 }
 
-# Subscriptions
 hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# Backend Configuration (for remote_state)
-backend_resource_group_name = "terraform-state-rg"
-backend_storage_account_name = "terraformstate"
-backend_container_name = "tfstate"
+# Backend (Bootstrap의 terraform.tfvars와 동일하게 맞출 것)
+backend_resource_group_name  = "terraform-state-rg"
+backend_storage_account_name = "tfstate07dc60"
+backend_container_name       = "tfstate"
 
-# VM Configuration (PEM 키로만 접근. Terraform이 SSH 키 쌍 생성 후 monitoring_vm_key.pem 저장)
-vm_size           = "Standard_B2s"
-vm_admin_username = "azureadmin"
-# vm_ssh_private_key_filename = "monitoring_vm_key.pem"  # 기본값. 필요 시 변경
+# 방화벽 정책(ASG): 키만 지정. ID 조회 불필요. 기본값으로 모든 VM에 keyvault_clients·vm_allowed_clients 적용
+# application_security_group_keys = ["keyvault_clients", "vm_allowed_clients"]
 
-# Feature Flags
-enable_monitoring_vm = true
-enable_key_vault = true
+# --- Linux Monitoring VM ---
+linux_monitoring_vm_name           = "monitoring-vm"
+linux_monitoring_vm_size           = "Standard_D2s_v3"
+linux_monitoring_vm_admin_username = "azureadmin"
+# linux_monitoring_vm_ssh_key_filename = "linux_monitoring_vm_key.pem"
+linux_monitoring_vm_enable = true
+# 방화벽 정책(ASG): 키로만 지정. null이면 전역 application_security_group_keys 사용
+# linux_monitoring_vm_application_security_group_keys = null  # 또는 ["keyvault_clients"], [] 등
+
+# --- Windows Example VM ---
+windows_example_vm_name        = "win-example"
+windows_example_vm_size        = "Standard_D2s_v3"
+windows_example_admin_username = "azureadmin"
+windows_example_admin_password = "CHANGE_ME_StrongP@ssw0rd!"
+windows_example_enable         = true
+# 방화벽 정책(ASG): 키로만 지정. null이면 전역 application_security_group_keys 사용
+# windows_example_application_security_group_keys = null

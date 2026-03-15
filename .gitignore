@@ -4,6 +4,7 @@
 terraform_modules/
 *.tfstate
 *.tfstate.*
+maintfstatestorage
 crash.log
 override.tf
 override.tf.json
@@ -23,6 +24,8 @@ tfplan
 
 # Compute stack: Terraform이 생성한 VM SSH 개인키 (절대 커밋 금지)
 **/monitoring_vm_key.pem
+**/vm_key.pem
+**/linux_monitoring_vm_key.pem
 
 # OS
 .DS_Store
@@ -41,3 +44,4 @@ comparison-report.json
 
 # Shell scripts (테스트/체크용만 제외; scripts/generate-backend-hcl.sh 는 커밋 유지)
 # *.sh
+maintfstatestorage
