@@ -47,6 +47,22 @@ State 1개(`azure/dev/compute/terraform.tfstate`), 하위 디렉터리(linux-mon
 
 ※ 실제 이름은 `terraform.tfvars`의 `project_name`, 각 스택 변수에 따라 달라질 수 있습니다.
 
+### 0.1 스택별 azurerm / AVM 참조
+
+| 스택 | azurerm (Provider) | AVM (Azure Verified Modules) | 비고 |
+|------|:------------------:|:----------------------------:|------|
+| **network** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(hub-vnet) 내부에서 AVM(Key Vault, Private Endpoint, Log Analytics, Resource Group 등) 사용. |
+| **storage** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(monitoring-storage) 내부에서 AVM(Key Vault, Storage, Private Endpoint, Log Analytics 등) 사용. |
+| **shared-services** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. log-analytics-workspace(ref=avm-1.0.0)·shared-services Git 모듈 내부에서 AVM(Operational Insights Workspace, Key Vault, Storage 등) 사용. |
+| **apim** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(spoke-workloads) 내부에서 AVM(Key Vault, Log Analytics, Resource Group, Private Endpoint 등) 사용. |
+| **ai-services** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(spoke-workloads) 내부에서 AVM(Key Vault, Log Analytics, Resource Group, Private Endpoint 등) 사용. |
+| **compute** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(linux-monitoring-vm, windows-example 등) 내부에서 AVM(Key Vault, Resource Group, Private Endpoint, Log Analytics 등) 사용. |
+| **rbac** | ✅ | — | provider: hashicorp/azurerm. 역할 할당만 관리하여 AVM 모듈 미사용. |
+| **connectivity** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(vnet-peering 등) 내부에서 AVM(Resource Group, Key Vault, Log Analytics, Private Endpoint 등) 사용. |
+
+- **azurerm**: Terraform Azure Provider(`hashicorp/azurerm`) — 모든 스택에서 사용.
+- **AVM**: Azure Verified Modules(Registry `Azure/avm-*`) — 공통 Git 모듈(terraform-modules)을 통해 간접 참조. RBAC만 AVM 미참조.
+
 ---
 
 ## 1. 배포 방식
