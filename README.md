@@ -57,6 +57,41 @@ terraform-iac/
 
 - 각 스택은 **루트**에 `main.tf`, `variables.tf`, `backend.tf`, `provider.tf` 등이 있고, **하위 디렉터리는 모듈**로만 사용(backend/remote_state 없음). 신규 리소스 추가 시: 예시 디렉터리 복사 → 루트 main.tf에 module 추가 → variables/terraform.tfvars에 변수 추가. `backend.hcl`은 **Bootstrap 적용 후 스크립트로 생성**합니다.
 
+### 2.3 스택별 배포 리소스
+
+각 스택이 생성·관리하는 Azure 리소스를 스택 기준으로 정리한 표입니다. (이름 예시는 `project_name` = `test` 기준, 접두사 `test-x-x`)
+
+| 스택 | 구독 | 배포 리소스 |
+|------|------|-------------|
+| **Bootstrap** | Hub | Resource Group, Storage Account, Storage Container (Backend State용) |
+| **network** | Hub | Resource Group, Virtual Network, Subnet(7종), VPN Gateway, Public IP, DNS Private Resolver, Private DNS Zone(14종), NSG, Private DNS Zone VNet Link |
+| | Spoke | Resource Group, Virtual Network, Subnet(2종), NSG, Private DNS Zone(5종), Private DNS Zone VNet Link |
+| **storage** | Hub | Key Vault, Storage Account(모니터링 로그용), Private Endpoint |
+| **shared-services** | Hub | Log Analytics Workspace, Solutions, Action Group, Dashboard |
+| **apim** | Spoke | API Management, 관련 Private Endpoint·DNS |
+| **ai-services** | Spoke | Azure OpenAI, AI Foundry(ML Workspace), 관련 Private Endpoint·Private DNS Zone |
+| **compute** | Hub | Linux VM(Monitoring), Windows VM(예시), Managed Identity |
+| **rbac** | Hub/Spoke | Role Assignment (Monitoring VM·Admin 그룹 등) |
+| **connectivity** | Hub | VNet Peering(Hub↔Spoke), VPN Connection, 진단 설정 |
+
+- 상세 리소스 이름·서브넷 목록은 각 스택 디렉터리의 `README.md`(예: `azure/dev/network/README.md`, `azure/dev/compute/README.md`)를 참고하세요.
+
+### 2.4 스택별 azurerm / AVM 참조
+
+| 스택 | azurerm (Provider) | AVM (Azure Verified Modules) | 비고 |
+|------|:------------------:|:----------------------------:|------|
+| **network** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(hub-vnet) 내부에서 AVM(Key Vault, Private Endpoint, Log Analytics, Resource Group 등) 사용. |
+| **storage** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(monitoring-storage) 내부에서 AVM(Key Vault, Storage, Private Endpoint, Log Analytics 등) 사용. |
+| **shared-services** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. log-analytics-workspace(ref=avm-1.0.0)·shared-services Git 모듈 내부에서 AVM(Operational Insights Workspace, Key Vault, Storage 등) 사용. |
+| **apim** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(spoke-workloads) 내부에서 AVM(Key Vault, Log Analytics, Resource Group, Private Endpoint 등) 사용. |
+| **ai-services** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(spoke-workloads) 내부에서 AVM(Key Vault, Log Analytics, Resource Group, Private Endpoint 등) 사용. |
+| **compute** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(linux-monitoring-vm, windows-example 등) 내부에서 AVM(Key Vault, Resource Group, Private Endpoint, Log Analytics 등) 사용. |
+| **rbac** | ✅ | — | provider: hashicorp/azurerm. 역할 할당만 관리하여 AVM 모듈 미사용. |
+| **connectivity** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(vnet-peering 등) 내부에서 AVM(Resource Group, Key Vault, Log Analytics, Private Endpoint 등) 사용. |
+
+- **azurerm**: Terraform Azure Provider(`hashicorp/azurerm`) — 모든 스택에서 사용.
+- **AVM**: Azure Verified Modules(Registry `Azure/avm-*`) — 공통 Git 모듈(terraform-modules)을 통해 간접 참조. RBAC만 AVM 미참조.
+
 ---
 
 ## 3. 초기 배포 작업 순서
@@ -206,19 +241,31 @@ terraform apply -var-file=terraform.tfvars
   **Spoke 구독** (`test-x-x-spoke-rg`): Spoke VNet, API Management, Azure OpenAI, Azure AI Foundry, 각 서비스용 Private Endpoint 및 Private DNS Zone.
 - **연결**: VNet Peering (Hub ↔ Spoke), Spoke 쪽 Private DNS Zone 링크는 Hub에서 생성한 Zone을 사용.
 
-개요만 보면:
+개요만 보면 (서브넷 구분 포함):
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Hub Subscription (test-x-x-rg)           │
-│  Hub VNet ─ VPN Gateway, DNS Resolver, Key Vault,           │
-│             Monitoring Storage, Monitoring VM, Log Analytics │
-└─────────────────────────────────────────────────────────────┘
-                          │ VNet Peering
-┌─────────────────────────┴─────────────────────────────────┐
-│                  Spoke Subscription (test-x-x-spoke-rg)     │
-│  Spoke VNet ─ API Management, Azure OpenAI, AI Foundry, PE  │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                     Hub Subscription (test-x-x-rg) · Hub VNet                    │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  GatewaySubnet          │ VPN Gateway, Public IP                                 │
+│  DNSResolver-Inbound    │ DNS Private Resolver (Inbound)                          │
+│  AzureFirewallSubnet    │ (선택) Azure Firewall                                   │
+│  AzureFirewallMgmtSubnet│ (선택) Azure Firewall 관리                              │
+│  AppGatewaySubnet       │ (선택) Application Gateway                              │
+│  Monitoring-VM-Subnet   │ Linux Monitoring VM, Windows VM                         │
+│  pep-snet               │ Key Vault PE, Storage PE (Private Endpoint)              │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  기타: Key Vault, Monitoring Storage, Log Analytics, Shared Services             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │ VNet Peering
+┌───────────────────────────────────────┴───────────────────────────────────────────┐
+│                 Spoke Subscription (test-x-x-spoke-rg) · Spoke VNet              │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  apim-snet   │ API Management                                                    │
+│  pep-snet    │ APIM / OpenAI / AI Foundry 등 Private Endpoint                    │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  기타: Azure OpenAI, AI Foundry(ML Workspace), Private DNS Zone(5종)              │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 배포 검증 (선택)
