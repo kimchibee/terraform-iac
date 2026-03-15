@@ -78,19 +78,21 @@ terraform-iac/
 
 ### 2.4 스택별 azurerm / AVM 참조
 
-| 스택 | azurerm (Provider) | AVM (Azure Verified Modules) | 비고 |
-|------|:------------------:|:----------------------------:|------|
-| **network** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(hub-vnet) 내부에서 AVM(Key Vault, Private Endpoint, Log Analytics, Resource Group 등) 사용. |
-| **storage** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(monitoring-storage) 내부에서 AVM(Key Vault, Storage, Private Endpoint, Log Analytics 등) 사용. |
-| **shared-services** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. log-analytics-workspace(ref=avm-1.0.0)·shared-services Git 모듈 내부에서 AVM(Operational Insights Workspace, Key Vault, Storage 등) 사용. |
-| **apim** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(spoke-workloads) 내부에서 AVM(Key Vault, Log Analytics, Resource Group, Private Endpoint 등) 사용. |
-| **ai-services** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(spoke-workloads) 내부에서 AVM(Key Vault, Log Analytics, Resource Group, Private Endpoint 등) 사용. |
-| **compute** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(linux-monitoring-vm, windows-example 등) 내부에서 AVM(Key Vault, Resource Group, Private Endpoint, Log Analytics 등) 사용. |
-| **rbac** | ✅ | — | provider: hashicorp/azurerm. 역할 할당만 관리하여 AVM 모듈 미사용. |
-| **connectivity** | ✅ | ✅ (간접) | provider: hashicorp/azurerm. Git 모듈(vnet-peering 등) 내부에서 AVM(Resource Group, Key Vault, Log Analytics, Private Endpoint 등) 사용. |
+- **azurerm (루트/로컬에서 직접)**: 해당 스택의 루트 또는 로컬 모듈에서 `resource "azurerm_*"` / `data "azurerm_*"`를 직접 사용하는지 여부.
+- **AVM (모듈)**: 리소스 정의를 AVM 모듈로 두는지. 공동 모듈(terraform-modules) 내부는 **azurerm 리소스 직접 사용이 다수**이며, 일부 서브모듈만 AVM 사용. 공동 모듈 레포에도 azurerm 선언 및 azurerm_* 사용이 필연적.
 
-- **azurerm**: Terraform Azure Provider(`hashicorp/azurerm`) — 모든 스택에서 사용.
-- **AVM**: Azure Verified Modules(Registry `Azure/avm-*`) — 공통 Git 모듈(terraform-modules)을 통해 간접 참조. RBAC만 AVM 미참조.
+| 스택 | azurerm (루트/로컬에서 직접) | AVM (모듈) | 비고 |
+|------|:---------------------------:|:----------:|------|
+| **network** | ✅ keyvault-sg (NSG, ASG, rule 등) | ✅ 간접 | hub-vnet/spoke-vnet은 공동모듈 호출. 공동모듈 내부는 azurerm_* 다수, 일부 AVM. |
+| **storage** | — | ✅ 간접 | 공동모듈(monitoring-storage) 호출. 내부 azurerm_* 다수. |
+| **shared-services** | — | ✅ 간접 + log-analytics(ref=avm-1.0.0) | log-analytics-workspace에서 AVM 명시 사용. 나머지 공동모듈 내부는 azurerm_* 다수. |
+| **apim** | — | ✅ 간접 | 공동모듈(spoke-workloads) 호출. 내부 azurerm_* 다수. |
+| **ai-services** | — | ✅ 간접 | 공동모듈(spoke-workloads) 호출. 내부 azurerm_* 다수. |
+| **compute** | — | ✅ 간접 | 공동모듈(virtual-machine 등) 호출. 내부 azurerm_* 다수. |
+| **rbac** | ✅ main.tf, ai-developer-group (role_assignment) | — | 루트/로컬에서만 azurerm_role_assignment 사용. AVM 미사용. |
+| **connectivity** | — | ✅ 간접 | 공동모듈(vnet-peering 등) 호출. 내부 azurerm_* 다수. |
+
+- **공동 모듈(terraform-modules)**: provider 선언과 더불어 VNet, Subnet, Key Vault, Storage, VM, APIM, OpenAI, Private Endpoint, NSG, Role Assignment 등 대부분 **azurerm 리소스/데이터 소스 직접 사용**. 일부만 AVM 서브모듈 사용.
 
 ---
 
