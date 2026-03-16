@@ -45,19 +45,19 @@ terraform-iac/
 ├── azure/dev/                          # 스택별 배포 디렉터리 (각 스택 루트에서 plan/apply, State 키: azure/dev/<스택명>/terraform.tfstate)
 │   ├── network/                        # Hub/Spoke VNet, VPN Gateway, DNS Resolver, NSG
 │   │   ├── hub-vnet/                   # Hub VNet 하위 모듈
-│   │   ├── spoke-vnet/                 # Spoke VNet 하위 모듈 (신규 Spoke 시 폴더 복사 → 루트에 module·변수 추가)
+│   │   ├── spoke-vnet/                 # Spoke VNet 하위 모듈 (신규 Spoke 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
 │   │   ├── keyvault-sg/                # (옵션) Key Vault 접근 허용 NSG·ASG
 │   │   └── vm-access-sg/               # (옵션) VM 접속 허용 ASG·NSG 규칙
 │   ├── storage/                       # Key Vault, Monitoring Storage, Private Endpoint
-│   │   └── monitoring-storage/         # 하위 모듈 (동일 세트 추가 시 폴더 복사)
+│   │   └── monitoring-storage/         # 하위 모듈 (동일 세트 추가 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
 │   ├── shared-services/                # Log Analytics, Solutions, Action Group, Dashboard
-│   │   ├── log-analytics-workspace/   # 하위 모듈
-│   │   └── shared-services/            # 하위 모듈
+│   │   ├── log-analytics-workspace/   # 하위 모듈 (보존 일수 등 폴더 variables.tf 기본값)
+│   │   └── shared-services/            # 하위 모듈 (enable 등 폴더 variables.tf 기본값)
 │   ├── apim/                           # API Management (Internal VNet). 하위 모듈 없음, 루트에서 Git 모듈 참조
 │   ├── ai-services/                    # Azure OpenAI, AI Foundry. 하위 모듈 없음, 루트에서 Git 모듈 참조
 │   ├── compute/                        # VM·Managed Identity (스택 루트에서 plan/apply, State 1개)
-│   │   ├── linux-monitoring-vm/        # Linux VM 모듈 (신규 Linux VM 시 폴더 복사 → 루트에 module·변수 추가)
-│   │   └── windows-example/            # Windows VM 모듈 (신규 Windows VM 시 폴더 복사)
+│   │   ├── linux-monitoring-vm/        # Linux VM 모듈 (신규 VM 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
+│   │   └── windows-example/            # Windows VM 모듈 (동일. Windows만 루트에 admin_password 1개 추가)
 │   ├── rbac/                           # Monitoring VM 역할 할당 + 그룹 기반 역할·멤버십 관리
 │   │   ├── admin-group/                # 관리자 그룹 (역할 부여)
 │   │   │   └── admin-users/            # 멤버십 관리: 그룹 소속 사용자·그룹 등록·변경·삭제(Terraform)
@@ -73,7 +73,11 @@ terraform-iac/
 
 - 각 스택 **루트**에는 `main.tf`, `variables.tf`, `outputs.tf`, `backend.tf`, `provider.tf`, `terraform.tfvars.example` 등이 있습니다. **하위 디렉터리는 모듈**로만 사용(하위에서 backend/remote_state 없음).
 - **backend.hcl**은 저장소에 포함되지 않으며, **Bootstrap 적용 후** `./scripts/generate-backend-hcl.sh` 실행으로 각 스택 디렉터리에 생성됩니다.
-- 신규 리소스 추가 시: 예시 디렉터리 복사 → **해당 폴더 main.tf 상단 주석** 참고 → 루트 `main.tf`에 module 추가 → `variables.tf`·`terraform.tfvars`에 변수·값 추가.
+
+**변수 관리 방식 (스택 공통)**  
+- **루트**: 구독 ID, backend, location, tags, remote_state로 얻는 컨텍스트(리소스 그룹명·서브넷 ID 등)만 관리.  
+- **하위 폴더**: 각 리소스의 **이름·사이즈·옵션**(주소 공간, 서브넷, 보존 일수, 역할 이름 등)은 **해당 폴더의 variables.tf 기본값**에서 관리.  
+→ 신규 인스턴스 추가 시: **폴더 복사** → **복사한 폴더의 variables.tf 기본값만 수정** → **루트 main.tf에 module 블록만 추가**. 루트 `variables.tf`·`terraform.tfvars`에 인스턴스별 변수를 추가하지 않음. (예: compute의 VM, network의 Spoke, storage의 monitoring-storage, shared-services의 log-analytics, rbac의 그룹.)
 
 ### 2.3 스택별 배포 리소스
 
@@ -302,8 +306,8 @@ Peering이 **Connected**이면 정상입니다.
 
 ## 참고 링크
 
-- **스택별 상세 가이드**: 각 스택 디렉터리의 `README.md` (예: `azure/dev/network/README.md`).  
+- **스택별 상세 가이드**: 각 스택 디렉터리의 `README.md` (예: `azure/dev/network/README.md`, `azure/dev/compute/README.md`).  
   - 각 스택 README에는 **「0. 복사/붙여넣기용 배포 명령어」** 절이 있어, 명령어 블록을 그대로 복사해 터미널에 붙여넣기만 하면 됩니다.  
-  - 신규 리소스 추가 시 **폴더를 통째로 복사**하는 경우(예: VM 추가, Spoke VNet 추가, 그룹 추가): 복사 대상 폴더의 **main.tf 상단 주석**에 "이 폴더를 통째로 복사한 뒤" **어떤 파일을 어떻게 수정할지** 적혀 있습니다.
+  - **변수 관리**: 루트는 컨텍스트(구독·backend·remote_state 출력)만, 리소스 정보(이름·사이즈·옵션)는 **해당 하위 폴더 variables.tf 기본값**에서 관리합니다. 신규 인스턴스 추가 시 **폴더 복사** → **그 폴더 variables.tf만 수정** → **루트 main.tf에 module 블록만 추가**하면 됩니다. (각 스택 README의 「변수 관리 방식」「추가 가이드」 참고.)
 - **Backend·backend.hcl 생성**: `bootstrap/backend/README.md`.
 - **자주 나오는 오류**: 구독 Provider 미등록(409) → [3.1 구독 Resource Provider 등록](#31-구독-resource-provider-필수-등록). OpenAI 쿼터 부족 → [3.3 AI 모델 지정](#33-ai-모델-지정-방법-가이드-ai-services-스택).

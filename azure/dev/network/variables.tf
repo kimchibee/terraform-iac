@@ -56,26 +56,8 @@ variable "hub_subnets" {
   }))
 }
 
-# Spoke Network Variables
-variable "spoke_vnet_address_space" {
-  description = "Spoke VNet address space"
-  type        = list(string)
-}
-
-variable "spoke_subnets" {
-  description = "Spoke subnet configurations (keys must match subnet names in locals.tf)"
-  type = map(object({
-    address_prefixes                      = list(string)
-    service_endpoints                     = optional(list(string), [])
-    private_endpoint_network_policies     = optional(string, "Disabled")
-    private_link_service_network_policies = optional(string, "Disabled")
-    delegation                            = optional(object({
-      name         = string
-      service_name = string
-      actions      = list(string)
-    }))
-  }))
-}
+# Spoke Network — 주소 공간·서브넷은 spoke-vnet 폴더 variables.tf 기본값에서 관리.
+# 신규 Spoke 추가 시 해당 폴더 복사 후 그 폴더만 수정하고, 루트에는 module 블록만 추가.
 
 # Spoke-owned Private DNS Zones (image: zones in both Hub and Spoke)
 variable "spoke_private_dns_zones" {

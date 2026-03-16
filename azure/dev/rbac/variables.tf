@@ -73,11 +73,7 @@ variable "admin_group_scope_id" {
   default     = null
 }
 
-variable "admin_group_role_definition_name" {
-  description = "관리자 그룹에 부여할 역할 이름 (예: Contributor, Owner)"
-  type        = string
-  default     = "Contributor"
-}
+# admin_group 역할 이름 — admin-group 폴더 variables.tf 기본값(Contributor)에서 관리
 
 variable "admin_group_member_object_ids" {
   description = "관리자 그룹에 소속시킬 멤버의 Azure AD Object ID 목록 (사용자·그룹·서비스 주체). 등록/변경/삭제는 Terraform apply로 반영."
@@ -95,11 +91,7 @@ variable "ai_developer_group_object_id" {
   default     = null
 }
 
-variable "ai_developer_group_spoke_rg_role" {
-  description = "AI 개발자 그룹에 부여할 Spoke 리소스 그룹 역할 (예: Reader)"
-  type        = string
-  default     = "Reader"
-}
+# ai_developer_group Spoke RG 역할 — ai-developer-group 폴더 variables.tf 기본값(Reader)에서 관리
 
 variable "ai_developer_group_member_object_ids" {
   description = "AI 개발자 그룹에 소속시킬 멤버의 Azure AD Object ID 목록. 등록/변경/삭제는 Terraform apply로 반영."

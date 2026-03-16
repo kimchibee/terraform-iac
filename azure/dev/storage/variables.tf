@@ -47,18 +47,7 @@ variable "backend_container_name" {
   default     = "tfstate"
 }
 
-# Feature Flags
-variable "enable_key_vault" {
-  description = "Enable Key Vault deployment"
-  type        = bool
-  default     = true
-}
-
-variable "enable_monitoring_vm" {
-  description = "Enable Monitoring VM (for role assignments)"
-  type        = bool
-  default     = false
-}
+# Key Vault / Monitoring VM 플래그 — monitoring-storage 폴더 variables.tf 기본값에서 관리
 
 variable "monitoring_vm_identity_principal_id" {
   description = "Monitoring VM Managed Identity Principal ID (from compute stack)"

@@ -21,8 +21,4 @@ backend_resource_group_name  = "terraform-state-rg"
 backend_storage_account_name = "tfstate07dc60"
 backend_container_name       = "tfstate"
 
-# Log Analytics
-log_analytics_retention_days = 30
-
-# Feature Flags
-enable_shared_services = true
+# Log Analytics / Shared Services — log-analytics-workspace, shared-services 폴더 variables.tf 기본값에서 관리

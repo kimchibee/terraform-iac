@@ -47,16 +47,4 @@ variable "backend_container_name" {
   default     = "tfstate"
 }
 
-# Log Analytics Variables
-variable "log_analytics_retention_days" {
-  description = "Log Analytics retention days"
-  type        = number
-  default     = 30
-}
-
-# Feature Flags
-variable "enable_shared_services" {
-  description = "Enable Shared Services deployment"
-  type        = bool
-  default     = true
-}
+# Log Analytics / Shared Services — log-analytics-workspace, shared-services 폴더 variables.tf 기본값에서 관리

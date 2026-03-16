@@ -4,17 +4,13 @@
 #--------------------------------------------------------------
 
 locals {
-  name_prefix = "${var.project_name}-x-x"
-  hub_resource_group_name = "${local.name_prefix}-rg"
-  hub_vnet_name           = "${local.name_prefix}-vnet"
-  hub_vpn_gateway_name    = "${local.name_prefix}-vpng"
-  hub_dns_resolver_name   = "${local.name_prefix}-pdr"
-  spoke_resource_group_name = "${local.name_prefix}-spoke-rg"
-  spoke_vnet_name           = "${local.name_prefix}-spoke-vnet"
-  hub_subnet_names = toset(["GatewaySubnet", "DNSResolver-Inbound", "AzureFirewallSubnet", "AzureFirewallManagementSubnet", "AppGatewaySubnet", "Monitoring-VM-Subnet", "pep-snet"])
-  spoke_subnet_names = toset(["apim-snet", "pep-snet"])
-  hub_subnets   = { for k, v in var.hub_subnets : k => v if contains(local.hub_subnet_names, k) }
-  spoke_subnets = { for k, v in var.spoke_subnets : k => v if contains(local.spoke_subnet_names, k) }
+  name_prefix              = "${var.project_name}-x-x"
+  hub_resource_group_name  = "${local.name_prefix}-rg"
+  hub_vnet_name            = "${local.name_prefix}-vnet"
+  hub_vpn_gateway_name     = "${local.name_prefix}-vpng"
+  hub_dns_resolver_name    = "${local.name_prefix}-pdr"
+  hub_subnet_names         = toset(["GatewaySubnet", "DNSResolver-Inbound", "AzureFirewallSubnet", "AzureFirewallManagementSubnet", "AppGatewaySubnet", "Monitoring-VM-Subnet", "pep-snet"])
+  hub_subnets              = { for k, v in var.hub_subnets : k => v if contains(local.hub_subnet_names, k) }
   # 시나리오 3: keyvault-sg — Hub NSG 키 → ID 매핑
   hub_nsg_id_by_key = {
     "monitoring_vm" = try(module.hub_vnet.nsg_monitoring_vm_id, null)
@@ -71,18 +67,15 @@ module "spoke_vnet" {
     azurerm.hub = azurerm.hub
   }
 
-  project_name = var.project_name
-  environment  = var.environment
-  location     = var.location
-  tags         = var.tags
-  resource_group_name = local.spoke_resource_group_name
-  vnet_name          = local.spoke_vnet_name
-  vnet_address_space = var.spoke_vnet_address_space
-  subnets            = local.spoke_subnets
-  hub_vnet_id            = module.hub_vnet.vnet_id
-  hub_resource_group_name = module.hub_vnet.resource_group_name
-  private_dns_zone_ids    = local.hub_zone_ids_for_spoke_link
-  spoke_private_dns_zones = local.spoke_private_dns_zones
+  project_name             = var.project_name
+  environment              = var.environment
+  location                 = var.location
+  tags                     = var.tags
+  name_prefix              = local.name_prefix
+  hub_vnet_id              = module.hub_vnet.vnet_id
+  hub_resource_group_name  = module.hub_vnet.resource_group_name
+  private_dns_zone_ids     = local.hub_zone_ids_for_spoke_link
+  spoke_private_dns_zones  = local.spoke_private_dns_zones
 
   depends_on = [module.hub_vnet]
 }

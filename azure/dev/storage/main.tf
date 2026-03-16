@@ -23,10 +23,6 @@ data "terraform_remote_state" "compute" {
   }
 }
 
-locals {
-  hub_key_vault_name = "${var.project_name}-hub-kv"
-}
-
 module "storage" {
   source = "./monitoring-storage"
 
@@ -34,16 +30,13 @@ module "storage" {
     azurerm = azurerm.hub
   }
 
-  project_name = var.project_name
-  environment  = var.environment
+  project_name  = var.project_name
+  environment   = var.environment
   location      = var.location
   tags          = var.tags
   resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
-  key_vault_name      = local.hub_key_vault_name
   monitoring_vm_subnet_id = data.terraform_remote_state.network.outputs.hub_subnet_ids["Monitoring-VM-Subnet"]
   pep_subnet_id           = data.terraform_remote_state.network.outputs.hub_subnet_ids["pep-snet"]
   private_dns_zone_ids = data.terraform_remote_state.network.outputs.hub_private_dns_zone_ids
-  enable_key_vault    = var.enable_key_vault
   monitoring_vm_identity_principal_id = try(data.terraform_remote_state.compute.outputs.monitoring_vm_identity_principal_id, var.monitoring_vm_identity_principal_id)
-  enable_monitoring_vm                 = var.enable_monitoring_vm
 }

@@ -14,24 +14,21 @@ data "terraform_remote_state" "network" {
 }
 
 locals {
-  name_prefix           = "${var.project_name}-x-x"
-  hub_log_analytics_name = "${local.name_prefix}-law"
+  name_prefix = "${var.project_name}-x-x"
 }
 
 module "log_analytics_workspace" {
   source = "./log-analytics-workspace"
   providers = { azurerm = azurerm.hub }
-  name                = local.hub_log_analytics_name
+  name_prefix         = local.name_prefix
   location            = var.location
   resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
-  retention_in_days   = var.log_analytics_retention_days
   tags                = var.tags
 }
 
 module "shared_services" {
   source = "./shared-services"
   providers = { azurerm = azurerm.hub }
-  enable                      = var.enable_shared_services
   resource_group_name         = data.terraform_remote_state.network.outputs.hub_resource_group_name
   log_analytics_workspace_id   = module.log_analytics_workspace.id
   log_analytics_workspace_name = module.log_analytics_workspace.name

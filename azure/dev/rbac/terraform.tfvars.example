@@ -31,12 +31,12 @@ enable_key_vault_roles     = true
 # 관리자 그룹
 # admin_group_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 # admin_group_scope_id  = "/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-# admin_group_role_definition_name = "Contributor"
+# 역할 이름 — admin-group 폴더 variables.tf 기본값에서 관리
 # admin_group_member_object_ids = ["user-or-group-object-id-1", "user-or-group-object-id-2"]
 
 # AI 개발자 그룹
 # ai_developer_group_object_id       = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-# ai_developer_group_spoke_rg_role   = "Reader"
+# Spoke RG 역할 — ai-developer-group 폴더 variables.tf 기본값에서 관리
 # ai_developer_group_member_object_ids = ["user-or-group-object-id-1"]
 
 #--------------------------------------------------------------

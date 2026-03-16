@@ -1,7 +1,8 @@
 #--------------------------------------------------------------
 # Compute 루트 변수 예시
 # cp terraform.tfvars.example terraform.tfvars 후 수정
-# 신규 VM 스택 추가 시: main.tf 에 module 블록 추가 + 여기/ variables.tf 에 변수 추가
+# 리소스별 정보(VM 이름 접미사, 사이즈, OS 등)는 각 하위 폴더(linux-monitoring-vm, windows-example)의 variables.tf 기본값에서 관리.
+# 루트에는 공통·컨텍스트·Windows 비밀번호만 둠.
 #--------------------------------------------------------------
 
 project_name = "test"
@@ -22,23 +23,8 @@ backend_resource_group_name  = "terraform-state-rg"
 backend_storage_account_name = "tfstate07dc60"
 backend_container_name       = "tfstate"
 
-# 방화벽 정책(ASG): 키만 지정. ID 조회 불필요. 기본값으로 모든 VM에 keyvault_clients·vm_allowed_clients 적용
+# 방화벽 정책(ASG): 모든 VM에 공통 적용. 필요 시 ["keyvault_clients"], ["vm_allowed_clients"] 등으로 변경
 # application_security_group_keys = ["keyvault_clients", "vm_allowed_clients"]
 
-# --- Linux Monitoring VM ---
-linux_monitoring_vm_name           = "monitoring-vm"
-linux_monitoring_vm_size           = "Standard_D2s_v3"
-linux_monitoring_vm_admin_username = "azureadmin"
-# linux_monitoring_vm_ssh_key_filename = "linux_monitoring_vm_key.pem"
-linux_monitoring_vm_enable = true
-# 방화벽 정책(ASG): 키로만 지정. null이면 전역 application_security_group_keys 사용
-# linux_monitoring_vm_application_security_group_keys = null  # 또는 ["keyvault_clients"], [] 등
-
-# --- Windows Example VM ---
-windows_example_vm_name        = "win-example"
-windows_example_vm_size        = "Standard_D2s_v3"
-windows_example_admin_username = "azureadmin"
+# Windows VM 비밀번호만 루트에서 설정 (보안상 저장소에 올리지 말 것). Linux VM은 SSH 키로 인증
 windows_example_admin_password = "CHANGE_ME_StrongP@ssw0rd!"
-windows_example_enable         = true
-# 방화벽 정책(ASG): 키로만 지정. null이면 전역 application_security_group_keys 사용
-# windows_example_application_security_group_keys = null

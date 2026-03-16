@@ -1,19 +1,17 @@
 #--------------------------------------------------------------
 # Linux VM 모듈 (compute 루트에서 module로 호출)
-# backend/remote_state 없음. resource_group_name, subnet_id 등은 루트에서 전달
+# 루트는 컨텍스트(name_prefix, rg, subnet, location, tags, ASG)만 전달.
+# 리소스 정보(사이즈, OS, 이름 접미사 등)는 이 폴더 variables.tf 기본값으로 관리.
 #
 # [신규 Linux VM 추가 시 이 폴더를 통째로 복사한 뒤]
 # 1. 폴더명 변경: 예) linux-monitoring-vm → linux-app-01
-# 2. 이 폴더 내부 수정:
-#    - 수정 불필요. (vm_name, vm_size, admin_username 등은 모두 루트에서 변수로 전달)
-#    - SSH 키 파일명만 바꿀 경우: 루트 variables.tf의 해당 VM용 ssh_private_key_filename 변수로 지정
-# 3. compute 루트에서 수정할 것:
-#    - main.tf: module "linux_app_01" { source = "./linux-app-01"; ... } 블록 추가
-#               vm_name = "${local.name_prefix}-${var.linux_app_01_vm_name}"
-#               application_security_group_ids = [for k in coalesce(var.linux_app_01_application_security_group_keys, var.application_security_group_keys) : local.asg_id_by_key[k] if try(local.asg_id_by_key[k], null) != null]
-#    - variables.tf: linux_app_01_vm_name, linux_app_01_vm_size, linux_app_01_ssh_key_filename, linux_app_01_application_security_group_keys(default=null), linux_app_01_enable, linux_app_01_extensions 등 추가
-#    - terraform.tfvars: linux_app_01_vm_name = "app-01", linux_app_01_vm_size = "Standard_D2s_v3" 등 설정
+# 2. 이 폴더에서만 수정: variables.tf 의 vm_name_suffix, vm_size, admin_username, vm_extensions 등 기본값
+# 3. 루트 main.tf: module "linux_app_01" { source = "./linux-app-01"; name_prefix = local.name_prefix; resource_group_name = local.hub_rg; subnet_id = local.hub_subnet; location = var.location; tags = var.tags; application_security_group_ids = [...] } 만 추가 (VM별 변수 없음)
 #--------------------------------------------------------------
+
+locals {
+  vm_name = "${var.name_prefix}-${var.vm_name_suffix}"
+}
 
 resource "tls_private_key" "vm_ssh" {
   count     = var.enable_vm ? 1 : 0
@@ -36,7 +34,7 @@ module "vm" {
     azurerm = azurerm
   }
 
-  name                 = var.vm_name
+  name                 = local.vm_name
   os_type              = "linux"
   size                 = var.vm_size
   location             = var.location

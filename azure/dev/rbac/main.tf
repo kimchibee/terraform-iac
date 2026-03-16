@@ -105,10 +105,9 @@ module "admin_group" {
     azuread = azuread
   }
 
-  group_object_id      = var.admin_group_object_id
-  scope_id             = var.admin_group_scope_id
-  role_definition_name = var.admin_group_role_definition_name
-  member_object_ids    = coalesce(var.admin_group_member_object_ids, [])
+  group_object_id   = var.admin_group_object_id
+  scope_id          = var.admin_group_scope_id
+  member_object_ids = coalesce(var.admin_group_member_object_ids, [])
 }
 
 module "ai_developer_group" {
@@ -120,11 +119,10 @@ module "ai_developer_group" {
     azuread = azuread
   }
 
-  group_object_id               = var.ai_developer_group_object_id
-  spoke_resource_group_id       = data.terraform_remote_state.network.outputs.spoke_resource_group_id
-  spoke_rg_role_definition_name = var.ai_developer_group_spoke_rg_role
-  openai_id                     = try(data.terraform_remote_state.ai_services.outputs.openai_id, null)
-  member_object_ids             = coalesce(var.ai_developer_group_member_object_ids, [])
+  group_object_id         = var.ai_developer_group_object_id
+  spoke_resource_group_id = data.terraform_remote_state.network.outputs.spoke_resource_group_id
+  openai_id               = try(data.terraform_remote_state.ai_services.outputs.openai_id, null)
+  member_object_ids       = coalesce(var.ai_developer_group_member_object_ids, [])
 }
 
 #--------------------------------------------------------------
