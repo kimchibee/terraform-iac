@@ -197,20 +197,20 @@ az provider show --namespace Microsoft.OperationalInsights --query "registration
 # 필요 시 다른 namespace도 동일하게 확인
 ```
 
-### 3.2 배포 순서 요약
+### 3.2 배포 순서 및 스택별 배포 내용 요약
 
-| 순서 | 스택 | 디렉터리 | 비고 |
-|------|------|----------|------|
-| 0 | Bootstrap | `bootstrap/backend` | Backend Storage·Container 생성. **최초 1회.** `terraform init`만 사용(backend.hcl 없음). |
-| - | **backend.hcl 생성** | 프로젝트 루트 | Bootstrap **apply 완료 후** `./scripts/generate-backend-hcl.sh` 실행. |
-| 1 | network | `azure/dev/01.network` | Hub/Spoke VNet, 서브넷, VPN Gateway, DNS Resolver, NSG |
-| 2 | storage | `azure/dev/02.storage` | Key Vault, Monitoring Storage, PE |
-| 3 | shared-services | `azure/dev/03.shared-services` | Log Analytics, Solutions, Action Group, Dashboard |
-| 4 | apim | `azure/dev/04.apim` | API Management |
-| 5 | ai-services | `azure/dev/05.ai-services` | Azure OpenAI, AI Foundry (모델은 3.3 참고) |
-| 6 | compute | `azure/dev/06.compute` | Linux/Windows VM (루트에서 plan/apply, 하위 linux-monitoring-vm/, windows-example/ 은 모듈). VM 추가 시 폴더 복사 후 루트에 module·변수 추가 |
-| 7 | rbac | `azure/dev/07.rbac` | Monitoring VM 역할 할당, admin-group/ai-developer-group 그룹 기반 권한 |
-| 8 | connectivity | `azure/dev/08.connectivity` | VNet Peering, 진단 설정 |
+| 순서 | 스택 | 디렉터리 | 배포 리소스명(예: project_name=test) | 비고 |
+|------|------|----------|--------------------------------------|------|
+| 0 | Bootstrap | `bootstrap/backend` | Resource Group, Storage Account, Storage Container (이름은 terraform.tfvars 기준) | Backend State용. **최초 1회.** `terraform init`만 사용(backend.hcl 없음). |
+| - | **backend.hcl 생성** | 프로젝트 루트 | — | Bootstrap **apply 완료 후** `./scripts/generate-backend-hcl.sh` 실행. |
+| 1 | network | `azure/dev/01.network` | **Hub:** `test-x-x-rg`, `test-x-x-vnet`, 서브넷(GatewaySubnet, DNSResolver-Inbound, AzureFirewallSubnet, AzureFirewallManagementSubnet, AppGatewaySubnet, Monitoring-VM-Subnet, pep-snet), `test-x-x-vpng`, `test-x-x-vpng-pip`, `test-x-x-pdr`, Private DNS Zone(14종), `test-monitoring-vm-nsg`, `test-pep-nsg`, (옵션) `test-x-x-keyvault-sg`, `test-x-x-vm-allowed-clients-asg`. **Spoke:** `test-x-x-spoke-rg`, `test-x-x-spoke-vnet`, 서브넷(apim-snet, pep-snet), `test-spoke-pep-nsg`, Private DNS Zone(5종), VNet Link | Hub/Spoke VNet, VPN Gateway, DNS Resolver, NSG |
+| 2 | storage | `azure/dev/02.storage` | Key Vault `test-hub-kv`, Monitoring Storage Account(apimlog, vpnglog, vnetlog, nsglog, aoailog, aifoundrylog, acrlog, spkvlog 등), Key Vault·Storage용 Private Endpoint | Key Vault, Monitoring Storage, PE |
+| 3 | shared-services | `azure/dev/03.shared-services` | Log Analytics Workspace `test-x-x-law`, Solutions, Action Group, Dashboard | Log Analytics, Solutions, Action Group, Dashboard |
+| 4 | apim | `azure/dev/04.apim` | API Management(이름은 tfvars/변수 기준), APIM·관련 Private Endpoint, Private DNS Zone 링크 | API Management |
+| 5 | ai-services | `azure/dev/05.ai-services` | Azure OpenAI 리소스, Azure AI Foundry(ML Workspace), OpenAI·ML·Notebooks·Storage 등 Private Endpoint, Private DNS Zone | Azure OpenAI, AI Foundry (모델은 3.3 참고) |
+| 6 | compute | `azure/dev/06.compute` | Linux VM `test-x-x-monitoring-vm`, Windows VM `test-x-x-win-example`, 각 VM의 Managed Identity, NIC, OS Disk | Linux/Windows VM. VM 추가 시 폴더 복사 후 루트에 module·변수 추가 |
+| 7 | rbac | `azure/dev/07.rbac` | Role Assignment(Monitoring VM → Storage Blob Data Contributor, Key Vault Secrets User 등), (옵션) admin-group/ai-developer-group 그룹 역할·멤버십 | Monitoring VM 역할 할당, 그룹 기반 권한 |
+| 8 | connectivity | `azure/dev/08.connectivity` | VNet Peering `test-x-x-vnet-to-spoke`, `test-x-x-spoke-vnet-to-hub`, 진단 설정(`test-x-x-vnet-vpng-storage-diag`, `test-x-x-vnet-storage-diag`, NSG 진단 등) | VNet Peering, 진단 설정 |
 
 **각 스택 공통 절차:**
 

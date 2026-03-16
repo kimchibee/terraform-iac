@@ -6,13 +6,17 @@
 # 신규 VM 추가: 폴더 복제 → 해당 폴더 variables.tf 기본값 수정 → 루트 main.tf에 module 블록만 추가 (Windows면 루트에 admin_password 변수 1개 추가)
 #--------------------------------------------------------------
 
+# Network state: key는 01.network backend.hcl의 key와 동일해야 함.
+# - 01.network를 예전 경로(network)로 적용했다면 key = "azure/dev/network/terraform.tfstate"
+# - 01.network를 01.network 경로로 적용했다면 key = "azure/dev/01.network/terraform.tfstate"
+# backend_* 변수는 01.network와 동일한 저장소를 가리켜야 outputs를 읽을 수 있음.
 data "terraform_remote_state" "network" {
   backend = "azurerm"
   config = {
     resource_group_name  = var.backend_resource_group_name
     storage_account_name = var.backend_storage_account_name
     container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/terraform.tfstate"
+    key                  = "azure/dev/network/terraform.tfstate"
   }
 }
 
