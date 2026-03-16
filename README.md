@@ -58,14 +58,16 @@ terraform-iac/
 │   ├── compute/                        # VM·Managed Identity (스택 루트에서 plan/apply, State 1개)
 │   │   ├── linux-monitoring-vm/        # Linux VM 모듈 (신규 Linux VM 시 폴더 복사 → 루트에 module·변수 추가)
 │   │   └── windows-example/            # Windows VM 모듈 (신규 Windows VM 시 폴더 복사)
-│   ├── rbac/                           # Monitoring VM·그룹 기반 역할 할당
-│   │   ├── admin-group/                # 관리자 그룹 (admin-users/ 멤버십)
-│   │   └── ai-developer-group/         # AI 개발자 그룹 (ai-developer-users/ 멤버십). 신규 그룹 시 폴더 복사
+│   ├── rbac/                           # Monitoring VM 역할 할당 + 그룹 기반 역할·멤버십 관리
+│   │   ├── admin-group/                # 관리자 그룹 (역할 부여)
+│   │   │   └── admin-users/            # 멤버십 관리: 그룹 소속 사용자·그룹 등록·변경·삭제(Terraform)
+│   │   └── ai-developer-group/         # AI 개발자 그룹 (역할 부여). 신규 그룹 시 폴더 복사
+│   │       └── ai-developer-users/     # 멤버십 관리: 그룹 소속 사용자·그룹 등록·변경·삭제(Terraform)
 │   └── connectivity/                   # VNet Peering, 진단 설정. 하위 모듈 없음
 ├── bootstrap/backend/                  # Backend용 Storage Account·Container (최초 1회). backend.hcl 사용 안 함
 ├── scripts/
 │   └── generate-backend-hcl.sh         # Bootstrap apply 후 실행 → azure/dev/* 각 스택에 backend.hcl 생성
-├── config/                             # (선택) 정책·설정 예시 (acr-policy.json, openai-deployments.json 등)
+├── config/                             # (선택) 정책·설정 예시 (acr-policy.json, apim-policy.xml, openai-deployments.json)
 └── .github/workflows/                  # (선택) CI 워크플로
 ```
 
@@ -87,7 +89,7 @@ terraform-iac/
 | **apim** | Spoke | API Management, 관련 Private Endpoint·DNS |
 | **ai-services** | Spoke | Azure OpenAI, AI Foundry(ML Workspace), 관련 Private Endpoint·Private DNS Zone |
 | **compute** | Hub | Linux VM(Monitoring), Windows VM(예시), Managed Identity |
-| **rbac** | Hub/Spoke | Role Assignment (Monitoring VM, admin-group, ai-developer-group 등) |
+| **rbac** | Hub/Spoke | Role Assignment (Monitoring VM, 그룹 역할) + 그룹 멤버십 등록·변경·삭제(Terraform) |
 | **connectivity** | Hub | VNet Peering(Hub↔Spoke), VPN Connection, 진단 설정 |
 
 - 상세 리소스 이름·서브넷 목록은 각 스택 디렉터리의 `README.md`(예: `azure/dev/network/README.md`, `azure/dev/compute/README.md`)를 참고하세요.
