@@ -42,31 +42,31 @@
 
 ```
 terraform-iac/
-├── azure/dev/                          # 스택별 배포 디렉터리 (각 스택 루트에서 plan/apply, State 키: azure/dev/<스택명>/terraform.tfstate)
-│   ├── network/                        # Hub/Spoke VNet, VPN Gateway, DNS Resolver, NSG
+├── azure/dev/                          # 스택별 배포 디렉터리 (각 스택 루트에서 plan/apply, State 키: azure/dev/01.network/terraform.tfstate 등)
+│   ├── 01.network/                     # (1) Hub/Spoke VNet, VPN Gateway, DNS Resolver, NSG
 │   │   ├── hub-vnet/                   # Hub VNet 하위 모듈
 │   │   ├── spoke-vnet/                 # Spoke VNet 하위 모듈 (신규 Spoke 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
 │   │   ├── keyvault-sg/                # (옵션) Key Vault 접근 허용 NSG·ASG
 │   │   └── vm-access-sg/               # (옵션) VM 접속 허용 ASG·NSG 규칙
-│   ├── storage/                       # Key Vault, Monitoring Storage, Private Endpoint
+│   ├── 02.storage/                     # (2) Key Vault, Monitoring Storage, Private Endpoint
 │   │   └── monitoring-storage/         # 하위 모듈 (동일 세트 추가 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
-│   ├── shared-services/                # Log Analytics, Solutions, Action Group, Dashboard
+│   ├── 03.shared-services/             # (3) Log Analytics, Solutions, Action Group, Dashboard
 │   │   ├── log-analytics-workspace/   # 하위 모듈 (보존 일수 등 폴더 variables.tf 기본값)
 │   │   └── shared-services/            # 하위 모듈 (enable 등 폴더 variables.tf 기본값)
-│   ├── apim/                           # API Management (Internal VNet). 하위 모듈 없음, 루트에서 Git 모듈 참조
-│   ├── ai-services/                    # Azure OpenAI, AI Foundry. 하위 모듈 없음, 루트에서 Git 모듈 참조
-│   ├── compute/                        # VM·Managed Identity (스택 루트에서 plan/apply, State 1개)
+│   ├── 04.apim/                         # (4) API Management (Internal VNet). 하위 모듈 없음, 루트에서 Git 모듈 참조
+│   ├── 05.ai-services/                  # (5) Azure OpenAI, AI Foundry. 하위 모듈 없음, 루트에서 Git 모듈 참조
+│   ├── 06.compute/                      # (6) VM·Managed Identity (스택 루트에서 plan/apply, State 1개)
 │   │   ├── linux-monitoring-vm/        # Linux VM 모듈 (신규 VM 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
 │   │   └── windows-example/            # Windows VM 모듈 (동일. Windows만 루트에 admin_password 1개 추가)
-│   ├── rbac/                           # Monitoring VM 역할 할당 + 그룹 기반 역할·멤버십 관리
+│   ├── 07.rbac/                         # (7) Monitoring VM 역할 할당 + 그룹 기반 역할·멤버십 관리
 │   │   ├── admin-group/                # 관리자 그룹 (역할 부여)
 │   │   │   └── admin-users/            # 멤버십 관리: 그룹 소속 사용자·그룹 등록·변경·삭제(Terraform)
 │   │   └── ai-developer-group/         # AI 개발자 그룹 (역할 부여). 신규 그룹 시 폴더 복사
 │   │       └── ai-developer-users/     # 멤버십 관리: 그룹 소속 사용자·그룹 등록·변경·삭제(Terraform)
-│   └── connectivity/                   # VNet Peering, 진단 설정. 하위 모듈 없음
+│   └── 08.connectivity/                 # (8) VNet Peering, 진단 설정. 하위 모듈 없음
 ├── bootstrap/backend/                  # Backend용 Storage Account·Container (최초 1회). backend.hcl 사용 안 함
 ├── scripts/
-│   └── generate-backend-hcl.sh         # Bootstrap apply 후 실행 → azure/dev/* 각 스택에 backend.hcl 생성
+│   └── generate-backend-hcl.sh         # Bootstrap apply 후 실행 → azure/dev/01.network, 02.storage, ... 각 스택에 backend.hcl 생성
 ├── config/                             # (선택) 정책·설정 예시 (acr-policy.json, apim-policy.xml, openai-deployments.json)
 └── .github/workflows/                  # (선택) CI 워크플로
 ```
@@ -96,7 +96,7 @@ terraform-iac/
 | **rbac** | Hub/Spoke | Role Assignment (Monitoring VM, 그룹 역할) + 그룹 멤버십 등록·변경·삭제(Terraform) |
 | **connectivity** | Hub | VNet Peering(Hub↔Spoke), VPN Connection, 진단 설정 |
 
-- 상세 리소스 이름·서브넷 목록은 각 스택 디렉터리의 `README.md`(예: `azure/dev/network/README.md`, `azure/dev/compute/README.md`)를 참고하세요.
+- 상세 리소스 이름·서브넷 목록은 각 스택 디렉터리의 `README.md`(예: `azure/dev/01.network/README.md`, `azure/dev/06.compute/README.md`)를 참고하세요.
 
 ### 2.4 스택별 azurerm / AVM 참조
 
@@ -203,19 +203,19 @@ az provider show --namespace Microsoft.OperationalInsights --query "registration
 |------|------|----------|------|
 | 0 | Bootstrap | `bootstrap/backend` | Backend Storage·Container 생성. **최초 1회.** `terraform init`만 사용(backend.hcl 없음). |
 | - | **backend.hcl 생성** | 프로젝트 루트 | Bootstrap **apply 완료 후** `./scripts/generate-backend-hcl.sh` 실행. |
-| 1 | network | `azure/dev/network` | Hub/Spoke VNet, 서브넷, VPN Gateway, DNS Resolver, NSG |
-| 2 | storage | `azure/dev/storage` | Key Vault, Monitoring Storage, PE |
-| 3 | shared-services | `azure/dev/shared-services` | Log Analytics, Solutions, Action Group, Dashboard |
-| 4 | apim | `azure/dev/apim` | API Management |
-| 5 | ai-services | `azure/dev/ai-services` | Azure OpenAI, AI Foundry (모델은 3.3 참고) |
-| 6 | compute | `azure/dev/compute` | Linux/Windows VM (루트에서 plan/apply, 하위 linux-monitoring-vm/, windows-example/ 은 모듈). VM 추가 시 폴더 복사 후 루트에 module·변수 추가 |
-| 7 | rbac | `azure/dev/rbac` | Monitoring VM 역할 할당, admin-group/ai-developer-group 그룹 기반 권한 |
-| 8 | connectivity | `azure/dev/connectivity` | VNet Peering, 진단 설정 |
+| 1 | network | `azure/dev/01.network` | Hub/Spoke VNet, 서브넷, VPN Gateway, DNS Resolver, NSG |
+| 2 | storage | `azure/dev/02.storage` | Key Vault, Monitoring Storage, PE |
+| 3 | shared-services | `azure/dev/03.shared-services` | Log Analytics, Solutions, Action Group, Dashboard |
+| 4 | apim | `azure/dev/04.apim` | API Management |
+| 5 | ai-services | `azure/dev/05.ai-services` | Azure OpenAI, AI Foundry (모델은 3.3 참고) |
+| 6 | compute | `azure/dev/06.compute` | Linux/Windows VM (루트에서 plan/apply, 하위 linux-monitoring-vm/, windows-example/ 은 모듈). VM 추가 시 폴더 복사 후 루트에 module·변수 추가 |
+| 7 | rbac | `azure/dev/07.rbac` | Monitoring VM 역할 할당, admin-group/ai-developer-group 그룹 기반 권한 |
+| 8 | connectivity | `azure/dev/08.connectivity` | VNet Peering, 진단 설정 |
 
 **각 스택 공통 절차:**
 
 ```bash
-cd azure/dev/<스택명>
+cd azure/dev/01.network   # 또는 02.storage, 03.shared-services, ... 08.connectivity
 cp terraform.tfvars.example terraform.tfvars
 # terraform.tfvars 편집 (구독 ID, backend 관련 변수 등)
 terraform init -backend-config=backend.hcl
@@ -224,12 +224,12 @@ terraform apply -var-file=terraform.tfvars
 ```
 
 - **backend.hcl**은 `./scripts/generate-backend-hcl.sh` 실행으로 생성됩니다. 수동 작성 방법은 **Bootstrap 스택 README** (`bootstrap/backend/README.md`)를 참고하세요.
-- **삭제(롤백) 시**: 스택을 제거할 때는 **배포의 역순**으로 진행하는 것이 안전합니다. **connectivity → rbac → compute → ai-services → apim → shared-services → storage → network**. 각 스택 **루트** 디렉터리에서 `terraform destroy -var-file=terraform.tfvars` 실행.
+- **삭제(롤백) 시**: 스택을 제거할 때는 **배포의 역순**으로 진행하는 것이 안전합니다. **08.connectivity → 07.rbac → 06.compute → 05.ai-services → 04.apim → 03.shared-services → 02.storage → 01.network**. 각 스택 **루트** 디렉터리에서 `terraform destroy -var-file=terraform.tfvars` 실행.
 
 ### 3.3 AI 모델 지정 방법 가이드 (ai-services 스택)
 
 - **Azure OpenAI 모델 배포**는 리전별 **쿼터**가 필요합니다. 쿼터 없으면 `InsufficientQuota` 오류가 발생합니다.
-- **쿼터 승인 전**: `azure/dev/ai-services/terraform.tfvars`에서 `openai_deployments = []` 로 두고 배포하면 **모델 배포 없이** AI Foundry, Private Endpoints 등만 생성됩니다.
+- **쿼터 승인 전**: `azure/dev/05.ai-services/terraform.tfvars`에서 `openai_deployments = []` 로 두고 배포하면 **모델 배포 없이** AI Foundry, Private Endpoints 등만 생성됩니다.
 - **쿼터 승인 후** 모델을 배포하려면:
 
 1. **쿼터 확인**  
@@ -237,7 +237,7 @@ terraform apply -var-file=terraform.tfvars
    쿼터 요청: [https://aka.ms/oai/stuquotarequest](https://aka.ms/oai/stuquotarequest)
 
 2. **변수 수정**  
-   `azure/dev/ai-services/terraform.tfvars`에서:
+   `azure/dev/05.ai-services/terraform.tfvars`에서:
    - `openai_deployments = []` 를 제거하고
    - 사용할 모델 블록을 아래 형식으로 추가합니다.
 
@@ -250,9 +250,9 @@ terraform apply -var-file=terraform.tfvars
    ```
 
 3. **재적용**  
-   `cd azure/dev/ai-services` 후 `terraform plan -var-file=terraform.tfvars` → `terraform apply -var-file=terraform.tfvars`
+   `cd azure/dev/05.ai-services` 후 `terraform plan -var-file=terraform.tfvars` → `terraform apply -var-file=terraform.tfvars`
 
-- 예시와 상세 옵션은 `azure/dev/ai-services/terraform.tfvars.example` 및 `docs/AZURE-OPENAI-QUOTA-AND-MODELS.md`(있는 경우)를 참고하세요.
+- 예시와 상세 옵션은 `azure/dev/05.ai-services/terraform.tfvars.example` 및 `docs/AZURE-OPENAI-QUOTA-AND-MODELS.md`(있는 경우)를 참고하세요.
 
 ---
 
@@ -306,7 +306,7 @@ Peering이 **Connected**이면 정상입니다.
 
 ## 참고 링크
 
-- **스택별 상세 가이드**: 각 스택 디렉터리의 `README.md` (예: `azure/dev/network/README.md`, `azure/dev/compute/README.md`).  
+- **스택별 상세 가이드**: 각 스택 디렉터리의 `README.md` (예: `azure/dev/01.network/README.md`, `azure/dev/06.compute/README.md`).  
   - 각 스택 README에는 **「0. 복사/붙여넣기용 배포 명령어」** 절이 있어, 명령어 블록을 그대로 복사해 터미널에 붙여넣기만 하면 됩니다.  
   - **변수 관리**: 루트는 컨텍스트(구독·backend·remote_state 출력)만, 리소스 정보(이름·사이즈·옵션)는 **해당 하위 폴더 variables.tf 기본값**에서 관리합니다. 신규 인스턴스 추가 시 **폴더 복사** → **그 폴더 variables.tf만 수정** → **루트 main.tf에 module 블록만 추가**하면 됩니다. (각 스택 README의 「변수 관리 방식」「추가 가이드」 참고.)
 - **Backend·backend.hcl 생성**: `bootstrap/backend/README.md`.

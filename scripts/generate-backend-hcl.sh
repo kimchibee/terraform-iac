@@ -6,6 +6,7 @@
 # - 로컬: 프로젝트 루트에서 ./scripts/generate-backend-hcl.sh
 # - CI: REPO_ROOT(또는 GITHUB_WORKSPACE/CI_PROJECT_DIR) 기준으로 실행 가능
 # (Bootstrap 적용 후 실행. bootstrap/backend/terraform.tfvars 가 있어야 함.)
+# - 스택 디렉터리: azure/dev/01.network, 02.storage, ... (배포 순서 접두사)
 #-----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -35,22 +36,23 @@ if [[ -z "$resource_group_name" || -z "$storage_account_name" || -z "$container_
   exit 1
 fi
 
-STACKS=(network storage shared-services apim ai-services compute rbac connectivity)
+# 배포 순서대로 디렉터리명 (접두사 01. ~ 08.)
+STACKS=(01.network 02.storage 03.shared-services 04.apim 05.ai-services 06.compute 07.rbac 08.connectivity)
 # compute 하위는 모듈로만 사용. backend는 compute 루트 1개
 COMPUTE_SUBDIRS=(linux-monitoring-vm windows-example)
 DEV_DIR="$REPO_ROOT/azure/dev"
 
 for stack in "${STACKS[@]}"; do
   case "$stack" in
-    network)         key="azure/dev/network/terraform.tfstate" ;;
-    storage)         key="azure/dev/storage/terraform.tfstate" ;;
-    shared-services) key="azure/dev/shared-services/terraform.tfstate" ;;
-    apim)            key="azure/dev/apim/terraform.tfstate" ;;
-    ai-services)     key="azure/dev/ai-services/terraform.tfstate" ;;
-    compute)         key="azure/dev/compute/terraform.tfstate" ;;
-    rbac)            key="azure/dev/rbac/terraform.tfstate" ;;
-    connectivity)    key="azure/dev/connectivity/terraform.tfstate" ;;
-    *)               echo "SKIP unknown stack: $stack" ; continue ;;
+    01.network)         key="azure/dev/01.network/terraform.tfstate" ;;
+    02.storage)         key="azure/dev/02.storage/terraform.tfstate" ;;
+    03.shared-services) key="azure/dev/03.shared-services/terraform.tfstate" ;;
+    04.apim)            key="azure/dev/04.apim/terraform.tfstate" ;;
+    05.ai-services)     key="azure/dev/05.ai-services/terraform.tfstate" ;;
+    06.compute)         key="azure/dev/06.compute/terraform.tfstate" ;;
+    07.rbac)            key="azure/dev/07.rbac/terraform.tfstate" ;;
+    08.connectivity)    key="azure/dev/08.connectivity/terraform.tfstate" ;;
+    *)                  echo "SKIP unknown stack: $stack" ; continue ;;
   esac
 
   dir="$DEV_DIR/$stack"
@@ -75,12 +77,12 @@ done
 
 # compute 하위 디렉터리별 backend.hcl (디렉터리 단위 VM 관리)
 for sub in "${COMPUTE_SUBDIRS[@]}"; do
-  dir="$DEV_DIR/compute/$sub"
+  dir="$DEV_DIR/06.compute/$sub"
   if [[ ! -d "$dir" ]]; then
     echo "SKIP (디렉터리 없음): $dir"
     continue
   fi
-  key="azure/dev/compute/$sub/terraform.tfstate"
+  key="azure/dev/06.compute/$sub/terraform.tfstate"
   hcl="$dir/backend.hcl"
   if [[ -f "$hcl" ]]; then
     echo "OVERWRITE $hcl"
