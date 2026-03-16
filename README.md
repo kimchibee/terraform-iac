@@ -38,24 +38,40 @@
 
 ### 2.2 디렉토리 구조 (terraform-iac)
 
+배포·관리 체계에 맞춘 실제 디렉터리 구조입니다. **plan/apply는 각 스택의 루트에서만** 실행하며, 스택당 State 1개입니다.
+
 ```
 terraform-iac/
-├── azure/dev/                    # 스택별 배포 디렉터리 (스택당 State 1개, 루트에서 plan/apply)
-│   ├── network/                  # hub-vnet/, spoke-vnet/ 하위 모듈
-│   ├── storage/                  # monitoring-storage/ 하위 모듈
-│   ├── shared-services/         # log-analytics-workspace/, shared-services/ 하위 모듈
-│   ├── apim/                     # API Management
-│   ├── ai-services/              # Azure OpenAI, AI Foundry
-│   ├── compute/                  # linux-monitoring-vm/, windows-example/ 하위 모듈 (VM 추가 시 디렉터리 복사 + 루트에 module·변수 추가)
-│   ├── rbac/                     # Monitoring VM → Hub/Spoke 역할 할당
-│   └── connectivity/             # VNet Peering (Hub↔Spoke), 진단 설정
-├── bootstrap/backend/            # Backend용 Storage Account·Container (최초 1회)
+├── azure/dev/                          # 스택별 배포 디렉터리 (각 스택 루트에서 plan/apply, State 키: azure/dev/<스택명>/terraform.tfstate)
+│   ├── network/                        # Hub/Spoke VNet, VPN Gateway, DNS Resolver, NSG
+│   │   ├── hub-vnet/                   # Hub VNet 하위 모듈
+│   │   ├── spoke-vnet/                 # Spoke VNet 하위 모듈 (신규 Spoke 시 폴더 복사 → 루트에 module·변수 추가)
+│   │   ├── keyvault-sg/                # (옵션) Key Vault 접근 허용 NSG·ASG
+│   │   └── vm-access-sg/               # (옵션) VM 접속 허용 ASG·NSG 규칙
+│   ├── storage/                       # Key Vault, Monitoring Storage, Private Endpoint
+│   │   └── monitoring-storage/         # 하위 모듈 (동일 세트 추가 시 폴더 복사)
+│   ├── shared-services/                # Log Analytics, Solutions, Action Group, Dashboard
+│   │   ├── log-analytics-workspace/   # 하위 모듈
+│   │   └── shared-services/            # 하위 모듈
+│   ├── apim/                           # API Management (Internal VNet). 하위 모듈 없음, 루트에서 Git 모듈 참조
+│   ├── ai-services/                    # Azure OpenAI, AI Foundry. 하위 모듈 없음, 루트에서 Git 모듈 참조
+│   ├── compute/                        # VM·Managed Identity (스택 루트에서 plan/apply, State 1개)
+│   │   ├── linux-monitoring-vm/        # Linux VM 모듈 (신규 Linux VM 시 폴더 복사 → 루트에 module·변수 추가)
+│   │   └── windows-example/            # Windows VM 모듈 (신규 Windows VM 시 폴더 복사)
+│   ├── rbac/                           # Monitoring VM·그룹 기반 역할 할당
+│   │   ├── admin-group/                # 관리자 그룹 (admin-users/ 멤버십)
+│   │   └── ai-developer-group/         # AI 개발자 그룹 (ai-developer-users/ 멤버십). 신규 그룹 시 폴더 복사
+│   └── connectivity/                   # VNet Peering, 진단 설정. 하위 모듈 없음
+├── bootstrap/backend/                  # Backend용 Storage Account·Container (최초 1회). backend.hcl 사용 안 함
 ├── scripts/
-│   └── generate-backend-hcl.sh   # Bootstrap 적용 후 각 스택에 backend.hcl 생성
-└── config/                       # (선택) 정책·설정 파일
+│   └── generate-backend-hcl.sh         # Bootstrap apply 후 실행 → azure/dev/* 각 스택에 backend.hcl 생성
+├── config/                             # (선택) 정책·설정 예시 (acr-policy.json, openai-deployments.json 등)
+└── .github/workflows/                  # (선택) CI 워크플로
 ```
 
-- 각 스택은 **루트**에 `main.tf`, `variables.tf`, `backend.tf`, `provider.tf` 등이 있고, **하위 디렉터리는 모듈**로만 사용(backend/remote_state 없음). 신규 리소스 추가 시: 예시 디렉터리 복사 → 루트 main.tf에 module 추가 → variables/terraform.tfvars에 변수 추가. `backend.hcl`은 **Bootstrap 적용 후 스크립트로 생성**합니다.
+- 각 스택 **루트**에는 `main.tf`, `variables.tf`, `outputs.tf`, `backend.tf`, `provider.tf`, `terraform.tfvars.example` 등이 있습니다. **하위 디렉터리는 모듈**로만 사용(하위에서 backend/remote_state 없음).
+- **backend.hcl**은 저장소에 포함되지 않으며, **Bootstrap 적용 후** `./scripts/generate-backend-hcl.sh` 실행으로 각 스택 디렉터리에 생성됩니다.
+- 신규 리소스 추가 시: 예시 디렉터리 복사 → **해당 폴더 main.tf 상단 주석** 참고 → 루트 `main.tf`에 module 추가 → `variables.tf`·`terraform.tfvars`에 변수·값 추가.
 
 ### 2.3 스택별 배포 리소스
 
@@ -71,7 +87,7 @@ terraform-iac/
 | **apim** | Spoke | API Management, 관련 Private Endpoint·DNS |
 | **ai-services** | Spoke | Azure OpenAI, AI Foundry(ML Workspace), 관련 Private Endpoint·Private DNS Zone |
 | **compute** | Hub | Linux VM(Monitoring), Windows VM(예시), Managed Identity |
-| **rbac** | Hub/Spoke | Role Assignment (Monitoring VM·Admin 그룹 등) |
+| **rbac** | Hub/Spoke | Role Assignment (Monitoring VM, admin-group, ai-developer-group 등) |
 | **connectivity** | Hub | VNet Peering(Hub↔Spoke), VPN Connection, 진단 설정 |
 
 - 상세 리소스 이름·서브넷 목록은 각 스택 디렉터리의 `README.md`(예: `azure/dev/network/README.md`, `azure/dev/compute/README.md`)를 참고하세요.
@@ -98,8 +114,9 @@ terraform-iac/
 
 전체 흐름: **Bootstrap → backend.hcl 생성 스크립트 실행 → 각 스택을 순서대로 배포**합니다.
 
-- **점검 기준표**: 배포하면서 스택별로 검증할 항목은 [`docs/DEPLOYMENT_VERIFICATION_CHECKLIST.md`](docs/DEPLOYMENT_VERIFICATION_CHECKLIST.md) 참고.
-- **배포 순서별 명령어**: 복사·실행용 명령어 목록은 [`docs/DEPLOYMENT_COMMANDS.md`](docs/DEPLOYMENT_COMMANDS.md) 참고.
+- **점검 기준표**: 배포 시 스택별 검증 항목은 `docs/DEPLOYMENT_VERIFICATION_CHECKLIST.md`(해당 파일이 있는 경우) 참고.
+- **배포 순서별 명령어**: 복사·실행용 명령어 목록은 `docs/DEPLOYMENT_COMMANDS.md`(해당 파일이 있는 경우) 참고.  
+  없으면 각 스택 README의 **「0. 복사/붙여넣기용 배포 명령어」** 를 순서대로 따라가면 됩니다.
 
 ### 3.0 사전 준비
 
@@ -185,8 +202,8 @@ az provider show --namespace Microsoft.OperationalInsights --query "registration
 | 3 | shared-services | `azure/dev/shared-services` | Log Analytics, Solutions, Action Group, Dashboard |
 | 4 | apim | `azure/dev/apim` | API Management |
 | 5 | ai-services | `azure/dev/ai-services` | Azure OpenAI, AI Foundry (모델은 3.3 참고) |
-| 6 | compute | `azure/dev/compute/linux-monitoring-vm` (및 기타 VM 디렉터리) | VM 디렉터리 단위 1대씩 (Linux 예: linux-monitoring-vm, Windows 예: windows-example) |
-| 7 | rbac | `azure/dev/rbac` | Monitoring VM(linux-monitoring-vm) 역할 할당 |
+| 6 | compute | `azure/dev/compute` | Linux/Windows VM (루트에서 plan/apply, 하위 linux-monitoring-vm/, windows-example/ 은 모듈). VM 추가 시 폴더 복사 후 루트에 module·변수 추가 |
+| 7 | rbac | `azure/dev/rbac` | Monitoring VM 역할 할당, admin-group/ai-developer-group 그룹 기반 권한 |
 | 8 | connectivity | `azure/dev/connectivity` | VNet Peering, 진단 설정 |
 
 **각 스택 공통 절차:**
@@ -201,7 +218,7 @@ terraform apply -var-file=terraform.tfvars
 ```
 
 - **backend.hcl**은 `./scripts/generate-backend-hcl.sh` 실행으로 생성됩니다. 수동 작성 방법은 **Bootstrap 스택 README** (`bootstrap/backend/README.md`)를 참고하세요.
-- **삭제(롤백) 시**: 스택을 제거할 때는 **배포의 역순**으로 진행하는 것이 안전 connectivity → rbac → compute → ai-services → apim → shared-services → storage → network. 각 스택 디렉터리에서 `terraform destroy -var-file=terraform.tfvars` 실행.
+- **삭제(롤백) 시**: 스택을 제거할 때는 **배포의 역순**으로 진행하는 것이 안전합니다. **connectivity → rbac → compute → ai-services → apim → shared-services → storage → network**. 각 스택 **루트** 디렉터리에서 `terraform destroy -var-file=terraform.tfvars` 실행.
 
 ### 3.3 AI 모델 지정 방법 가이드 (ai-services 스택)
 
