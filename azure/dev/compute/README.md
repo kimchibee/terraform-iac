@@ -5,7 +5,32 @@ State 1개(`azure/dev/compute/terraform.tfstate`), 하위 디렉터리(linux-mon
 
 ---
 
-## 0. 전체 배포 리소스 일람 (스택별)
+## 0. 복사/붙여넣기용 배포 명령어 (처음 배포 시)
+
+프로젝트 루트에서 시작한다고 가정합니다. **선행:** network 스택 apply 완료.
+
+**1단계: 변수 파일 복사**
+```bash
+cd azure/dev/compute
+cp terraform.tfvars.example terraform.tfvars
+```
+
+**2단계: terraform.tfvars 수정**  
+- `hub_subscription_id`, `backend_*` (Bootstrap과 동일)  
+- `windows_example_admin_password` → 반드시 강한 비밀번호로 변경  
+- (선택) `linux_monitoring_vm_name`, `linux_monitoring_vm_size`, `windows_example_vm_name` 등
+
+**3단계: init / plan / apply (한 블록 통째로 복사 후 실행)**
+```bash
+terraform init -backend-config=backend.hcl
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
+```
+apply 시 `yes` 입력.
+
+---
+
+## 0-2. 전체 배포 리소스 일람 (스택별)
 
 선행 스택까지 배포 완료 시 생성·관리되는 리소스를 스택 순서대로 정리한 표입니다. (`project_name` = `test` 기준, 접두사 `test-x-x`)
 
@@ -122,6 +147,10 @@ terraform apply -var-file=terraform.tfvars
 
 **공통 절차 (신규 인스턴스 추가 시)**  
 (1) 예시 디렉터리 복사 → (2) 필요 시 새 디렉터리 내 기본값 수정 → (3) 루트 `main.tf`에 module 블록 추가 → (4) 루트 `variables.tf`에 변수 추가 → (5) `terraform.tfvars`에 값 설정 → (6) **이 스택 루트에서** `terraform plan -var-file=terraform.tfvars` → `terraform apply -var-file=terraform.tfvars`.
+
+**복사 후 수정 가이드(주석):**  
+- **Linux VM:** `linux-monitoring-vm/main.tf` 상단 주석에 "신규 Linux VM 추가 시 이 폴더를 통째로 복사한 뒤" 수정할 항목이 정리되어 있음.  
+- **Windows VM:** `windows-example/main.tf` 상단 주석에 "신규 Windows VM 추가 시 이 폴더를 통째로 복사한 뒤" 수정할 항목이 정리되어 있음.
 
 ---
 

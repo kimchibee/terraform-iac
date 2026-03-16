@@ -5,6 +5,31 @@ State 1개(`azure/dev/rbac/terraform.tfstate`), 그룹별 하위 디렉터리(ad
 
 ---
 
+## 0. 복사/붙여넣기용 배포 명령어 (처음 배포 시)
+
+프로젝트 루트에서 시작한다고 가정합니다. **선행:** compute, network, storage, ai-services, apim apply 완료.
+
+**1단계: 변수 파일 복사**
+```bash
+cd azure/dev/rbac
+cp terraform.tfvars.example terraform.tfvars
+```
+
+**2단계: terraform.tfvars 수정**  
+- `hub_subscription_id`, `spoke_subscription_id`, `backend_*`  
+- `enable_monitoring_vm_roles`, `enable_key_vault_roles`  
+- (선택) `admin_group_object_id`, `admin_group_scope_id`, `ai_developer_group_object_id` (Azure AD 그룹 개체 ID)
+
+**3단계: init / plan / apply (한 블록 통째로 복사 후 실행)**
+```bash
+terraform init -backend-config=backend.hcl
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
+```
+apply 시 `yes` 입력.
+
+---
+
 ## 1. 배포 방식
 
 ```bash
@@ -104,6 +129,7 @@ RBAC 스택은 **리소스를 생성하지 않고**, 다른 스택이 만든 리
 
 1. **기존 그룹 폴더 복사**  
    `admin-group` 또는 `ai-developer-group` 폴더를 복사해 새 이름 생성 (예: `service-admin-group`).  
+   **(복사 후 수정 가이드:** `admin-group/main.tf`, `ai-developer-group/main.tf` 상단 주석에 "신규 그룹 추가 시 이 폴더를 통째로 복사한 뒤" 루트에서 수정할 항목이 정리되어 있음.)  
    복사한 폴더 안 **admin-users** / **ai-developer-users**와 동일한 이름 규칙(예: `service-admin-users`)으로 멤버십 관리용 하위 모듈을 유지합니다.
 
 2. **모듈 내용 수정**  

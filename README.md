@@ -283,6 +283,8 @@ Peering이 **Connected**이면 정상입니다.
 
 ## 참고 링크
 
-- **스택별 상세 가이드**: 각 스택 디렉터리의 `README.md` (예: `azure/dev/network/README.md`).
+- **스택별 상세 가이드**: 각 스택 디렉터리의 `README.md` (예: `azure/dev/network/README.md`).  
+  - 각 스택 README에는 **「0. 복사/붙여넣기용 배포 명령어」** 절이 있어, 명령어 블록을 그대로 복사해 터미널에 붙여넣기만 하면 됩니다.  
+  - 신규 리소스 추가 시 **폴더를 통째로 복사**하는 경우(예: VM 추가, Spoke VNet 추가, 그룹 추가): 복사 대상 폴더의 **main.tf 상단 주석**에 "이 폴더를 통째로 복사한 뒤" **어떤 파일을 어떻게 수정할지** 적혀 있습니다.
 - **Backend·backend.hcl 생성**: `bootstrap/backend/README.md`.
 - **자주 나오는 오류**: 구독 Provider 미등록(409) → [3.1 구독 Resource Provider 등록](#31-구독-resource-provider-필수-등록). OpenAI 쿼터 부족 → [3.3 AI 모델 지정](#33-ai-모델-지정-방법-가이드-ai-services-스택).

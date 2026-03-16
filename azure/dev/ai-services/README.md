@@ -5,6 +5,30 @@ Azure OpenAI, AI Foundry(ML Workspace, ACR, Storage, Application Insights), Spok
 
 ---
 
+## 0. 복사/붙여넣기용 배포 명령어 (처음 배포 시)
+
+프로젝트 루트에서 시작한다고 가정합니다. **선행:** network, storage, shared-services apply 완료.
+
+**1단계: 변수 파일 복사**
+```bash
+cd azure/dev/ai-services
+cp terraform.tfvars.example terraform.tfvars
+```
+
+**2단계: terraform.tfvars 수정**  
+- `hub_subscription_id`, `spoke_subscription_id`, `backend_*`  
+- `openai_sku`, `openai_deployments` (쿼터 승인 전에는 `openai_deployments = []` 로 두고 배포 가능)
+
+**3단계: init / plan / apply (한 블록 통째로 복사 후 실행)**
+```bash
+terraform init -backend-config=backend.hcl
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
+```
+apply 시 `yes` 입력.
+
+---
+
 ## 1. 배포 방식
 
 ```bash

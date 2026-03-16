@@ -5,6 +5,31 @@ API Management(Internal VNet)를 Spoke의 apim-snet에 배포하는 스택입니
 
 ---
 
+## 0. 복사/붙여넣기용 배포 명령어 (처음 배포 시)
+
+프로젝트 루트에서 시작한다고 가정합니다. **선행:** network, storage, shared-services apply 완료.
+
+**1단계: 변수 파일 복사**
+```bash
+cd azure/dev/apim
+cp terraform.tfvars.example terraform.tfvars
+```
+
+**2단계: terraform.tfvars 수정**  
+- `hub_subscription_id`, `spoke_subscription_id`, `backend_*`  
+- `apim_sku_name`, `apim_publisher_name`, `apim_publisher_email`
+
+**3단계: init / plan / apply (한 블록 통째로 복사 후 실행)**  
+(배포에 30분~1시간 소요될 수 있음.)
+```bash
+terraform init -backend-config=backend.hcl
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
+```
+apply 시 `yes` 입력.
+
+---
+
 ## 1. 배포 방식
 
 ```bash
