@@ -50,6 +50,48 @@ terraform apply -var-file=terraform.tfvars
 - **선행 스택:** 없음 (최초 배포 스택 중 하나).  
 - **다음 스택:** storage, shared-services, apim, ai-services, compute 등이 이 스택 state를 참조합니다.
 
+### 1.1 State 파일 위치 이전 (예전 `network` 경로 → `01.network`)
+
+폴더명 변경 전에 `network` 스택으로 배포해서 state가 `azure/dev/network/terraform.tfstate`에 있는 경우, 아래 순서로 **새 경로** `azure/dev/01.network/terraform.tfstate`로 옮길 수 있습니다. (이전 후 다른 스택들은 모두 `azure/dev/01.network/terraform.tfstate` 키를 참조하면 됩니다.)
+
+1. **이전용 backend 설정 파일 준비**  
+   `backend.hcl`을 복사한 뒤 `backend-old.hcl`로 저장하고, **key만** 예전 경로로 바꿉니다.
+
+   ```bash
+   cd azure/dev/01.network
+   cp backend.hcl backend-old.hcl
+   ```
+
+   `backend-old.hcl`을 열어 다음 한 줄만 수정합니다.
+
+   ```hcl
+   key = "azure/dev/network/terraform.tfstate"
+   ```
+
+2. **예전 state에 연결**  
+   예전 key로 init하여 현재 state를 사용 중인 backend에 연결합니다.
+
+   ```bash
+   terraform init -backend-config=backend-old.hcl -reconfigure
+   ```
+
+3. **새 경로로 state 이전**  
+   `backend.hcl`에는 이미 `key = "azure/dev/01.network/terraform.tfstate"`가 있어야 합니다 (`./scripts/generate-backend-hcl.sh` 실행 시 생성된 값). 이 설정으로 다시 init하고 state 이전을 진행합니다.
+
+   ```bash
+   terraform init -backend-config=backend.hcl -migrate-state
+   ```
+
+   (`-migrate-state`와 `-reconfigure`는 동시에 사용할 수 없으므로 `-migrate-state`만 사용합니다.)  
+   프롬프트에 **yes** 입력하면 예전 key의 state가 새 key로 복사됩니다.
+
+4. **정리**  
+   이전이 끝났으면 `backend-old.hcl`은 삭제해도 됩니다. 이후에는 항상 `backend.hcl`만 사용합니다.
+
+   ```bash
+   rm backend-old.hcl
+   ```
+
 ---
 
 ## 2. 배포 과정 상세

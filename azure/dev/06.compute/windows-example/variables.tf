@@ -41,9 +41,15 @@ variable "admin_password" {
 
 # ---- 이 폴더에서 관리 (리소스별 기본값, 복제 시 여기만 수정) ----
 variable "vm_name_suffix" {
-  description = "VM 이름 접미사. 최종 이름은 name_prefix-vm_name_suffix (computer_name 15자 제한)"
+  description = "Azure VM 리소스 이름 접미사. 최종 리소스명 = name_prefix-vm_name_suffix (예: win-example → test-x-x-win-example)"
   type        = string
   default     = "win-example"
+}
+
+variable "vm_computer_name_suffix" {
+  description = "Windows OS 호스트명(computer name) 접미사. 최종 호스트명 = name_prefix-vm_computer_name_suffix, 최대 15자 (예: winex → test-x-x-winex)"
+  type        = string
+  default     = "winex"
 }
 
 variable "vm_size" {

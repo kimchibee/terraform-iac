@@ -11,7 +11,8 @@
 #--------------------------------------------------------------
 
 locals {
-  vm_name = "${var.name_prefix}-${var.vm_name_suffix}"
+  vm_name       = "${var.name_prefix}-${var.vm_name_suffix}"       # Azure 리소스명 (길어도 됨, 예: test-x-x-win-example)
+  computer_name = "${var.name_prefix}-${var.vm_computer_name_suffix}" # Windows 호스트명, 15자 이하 (예: test-x-x-winex)
 }
 
 module "vm" {
@@ -23,6 +24,7 @@ module "vm" {
   }
 
   name                 = local.vm_name
+  computer_name        = local.computer_name
   os_type              = "windows"
   size                 = var.vm_size
   location             = var.location
