@@ -304,7 +304,365 @@ Peering이 **Connected**이면 정상입니다.
 
 ---
 
-## 참고 링크
+## 5. Pilot: 새 VNet + Linux 서버 + Hub Key Vault 접근 (방화벽·권한)
+
+**목표:** 새로운 Spoke VNet을 만들고, 그 위에 Linux 서버를 배치한 뒤, Hub 서브넷(pep-snet)에 있는 Key Vault로 접속 가능하도록 **방화벽(NSG/ASG)** 및 **권한(RBAC)** 을 추가하는 데 필요한 **복제할 폴더**와 **수정·추가할 파일/코드**를 정리한 가이드입니다.
+
+### 5.1 요약: 복제 폴더 및 수정 파일
+
+| 순서 | 작업 | 복제할 폴더 | 수정·추가할 파일 |
+|------|------|-------------|------------------|
+| 1 | 새 Spoke VNet | `01.network/spoke-vnet` → `01.network/spoke-vnet-pilot` | `spoke-vnet-pilot/variables.tf`, `01.network/main.tf`, `01.network/outputs.tf` |
+| 2 | 방화벽(Key Vault 접근) | (없음) | `01.network/terraform.tfvars` |
+| 3 | 새 Linux 서버(Spoke 배치) | `06.compute/linux-monitoring-vm` → `06.compute/linux-pilot-vm` | `linux-pilot-vm/variables.tf`, `06.compute/main.tf`, `06.compute/outputs.tf` |
+| 4 | Key Vault 권한(RBAC) | (없음) | `07.rbac/main.tf` |
+
+**적용 순서:** `01.network` → `06.compute` → `07.rbac` (storage는 기존 Hub Key Vault 사용, 변경 없음).
+
+### 5.2 새 VNet (Spoke Pilot) 추가
+
+#### 폴더 복제
+
+```bash
+cd azure/dev/01.network
+cp -r spoke-vnet spoke-vnet-pilot
+```
+
+- 복제 결과: `azure/dev/01.network/spoke-vnet-pilot/` (내부 파일 구조는 `spoke-vnet`과 동일)
+
+#### 수정: `azure/dev/01.network/spoke-vnet-pilot/variables.tf`
+
+**역할:** 이 Spoke만의 리소스 정보(RG·VNet·서브넷)를 기본값으로 정의. 복제본이므로 **아래 변수의 기본값만** Pilot용으로 바꿉니다.
+
+| 변수 | 수정 예시 | 설명 |
+|------|-----------|------|
+| `rg_suffix` | `"pilot-rg"` | Pilot 전용 Resource Group 접미사 |
+| `vnet_suffix` | `"pilot-vnet"` | Pilot VNet 이름 접미사 |
+| `vnet_address_space` | `["10.2.0.0/24"]` | Pilot VNet CIDR (기존 Spoke와 겹치지 않게) |
+| `subnets` | Pilot Linux 서버용 서브넷 1개 이상 | 서브넷 이름·주소·필요 시 service_endpoints |
+
+**예시 코드 (기본값만 변경):**
+
+```hcl
+#--------------------------------------------------------------
+# 이 Spoke(Pilot)의 리소스 정보
+#--------------------------------------------------------------
+variable "rg_suffix" {
+  description = "Resource Group 이름 접미사 (최종 이름: name_prefix-rg_suffix)"
+  type        = string
+  default     = "pilot-rg"
+}
+
+variable "vnet_suffix" {
+  description = "VNet 이름 접미사 (최종 이름: name_prefix-vnet_suffix)"
+  type        = string
+  default     = "pilot-vnet"
+}
+
+variable "vnet_address_space" {
+  description = "Spoke VNet 주소 공간"
+  type        = list(string)
+  default     = ["10.2.0.0/24"]
+}
+
+variable "subnets" {
+  description = "Spoke 서브넷 구성 (Linux 서버용 서브넷 등)"
+  type = map(object({
+    address_prefixes                      = list(string)
+    service_endpoints                     = optional(list(string), [])
+    private_endpoint_network_policies     = optional(string, "Disabled")
+    private_link_service_network_policies = optional(string, "Disabled")
+    delegation = optional(object({
+      name         = string
+      service_name = string
+      actions      = list(string)
+    }))
+  }))
+  default = {
+    "pilot-snet" = {
+      address_prefixes  = ["10.2.0.0/26"]
+      service_endpoints = ["Microsoft.Storage", "Microsoft.KeyVault", "Microsoft.EventHub"]
+    }
+  }
+}
+```
+
+- 기존 `spoke-vnet`의 `subnets`(apim-snet, pep-snet 등) 대신 Pilot용 `pilot-snet` 하나만 두었습니다. 필요하면 서브넷을 더 추가하면 됩니다.
+
+#### 추가: `azure/dev/01.network/main.tf`
+
+**역할:** Pilot Spoke를 루트에서 모듈로 호출. 기존 `module "spoke_vnet"` 블록 **아래**에 다음 블록을 **추가**합니다.
+
+```hcl
+#--------------------------------------------------------------
+# Pilot Spoke VNet (신규 VNet)
+#--------------------------------------------------------------
+module "spoke_vnet_pilot" {
+  source = "./spoke-vnet-pilot"
+
+  providers = {
+    azurerm     = azurerm.spoke
+    azurerm.hub = azurerm.hub
+  }
+
+  project_name             = var.project_name
+  environment              = var.environment
+  location                 = var.location
+  tags                     = var.tags
+  name_prefix              = local.name_prefix
+  hub_vnet_id              = module.hub_vnet.vnet_id
+  hub_resource_group_name  = module.hub_vnet.resource_group_name
+  private_dns_zone_ids     = local.hub_zone_ids_for_spoke_link
+  private_dns_zone_keys    = local.hub_zone_keys_for_spoke
+  private_dns_zone_names   = local.hub_zone_names_for_spoke
+  spoke_private_dns_zones  = local.spoke_private_dns_zones
+
+  depends_on = [module.hub_vnet]
+}
+```
+
+#### 추가: `azure/dev/01.network/outputs.tf`
+
+**역할:** Compute 스택에서 Pilot Spoke의 서브넷 ID·RG 이름을 `terraform_remote_state`로 읽을 수 있도록 출력 추가.
+
+파일 **끝**에 아래 블록을 **추가**합니다.
+
+```hcl
+# Pilot Spoke VNet Outputs (Compute에서 Linux Pilot VM 배치 시 사용)
+output "spoke_pilot_resource_group_name" {
+  description = "Pilot Spoke resource group name"
+  value       = module.spoke_vnet_pilot.resource_group_name
+}
+
+output "spoke_pilot_subnet_ids" {
+  description = "Map of Pilot Spoke subnet names to IDs"
+  value       = module.spoke_vnet_pilot.subnet_ids
+}
+```
+
+- Linux 서버를 `pilot-snet`에 둘 경우 Compute에서는 `spoke_pilot_subnet_ids["pilot-snet"]`으로 서브넷 ID를 사용합니다.
+
+### 5.3 방화벽: Hub Key Vault 접근 허용 (keyvault-sg·ASG)
+
+**목표:** Hub의 Key Vault는 Private Endpoint(pep-snet)에 있음. Spoke의 Linux 서버가 Key Vault(443)에 접속하려면  
+① 아웃바운드로 Key Vault(443) 허용,  
+② PE 쪽 NSG에서 **소스 = keyvault-clients ASG, 포트 443** 인바운드 허용이 필요합니다.  
+VM NIC에 `keyvault_clients` ASG를 붙이면 한 정책으로 허용됩니다.
+
+#### 수정: `azure/dev/01.network/terraform.tfvars`
+
+**역할:** keyvault-sg 모듈 및 PE 인바운드(ASG) 활성화. 아래 변수들을 **설정 또는 주석 해제**합니다.
+
+```hcl
+# 시나리오 3: keyvault-sg — Key Vault 접근 허용
+enable_keyvault_sg = true
+# 기존 Hub NSG에 Allow KeyVault 아웃바운드 규칙 추가 (monitoring_vm, pep)
+hub_nsg_keys_add_keyvault_rule = ["monitoring_vm", "pep"]
+# PE(pep-snet) NSG 인바운드: 소스 = keyvault-clients ASG, 포트 443 → VM NIC에 keyvault_clients ASG 붙이면 접근 허용
+enable_pe_inbound_from_asg = true
+keyvault_clients_asg_name  = "keyvault-clients-asg"
+```
+
+- 이미 `enable_keyvault_sg = true`, `enable_pe_inbound_from_asg = true`로 되어 있으면 변경 없이 유지하면 됩니다.
+- Network 스택 `terraform apply` 후 `outputs.tf`의 `keyvault_clients_asg_id`가 채워지며, Compute에서 이 ASG를 VM NIC에 붙입니다.
+
+**복제할 폴더 없음.** 기존 `01.network` 루트의 `terraform.tfvars`만 수정합니다.
+
+### 5.4 새 Linux 서버 (Pilot VM, Spoke 배치)
+
+#### 폴더 복제
+
+```bash
+cd azure/dev/06.compute
+cp -r linux-monitoring-vm linux-pilot-vm
+```
+
+- 복제 결과: `azure/dev/06.compute/linux-pilot-vm/` (내부 파일은 기존과 동일)
+
+#### 수정: `azure/dev/06.compute/linux-pilot-vm/variables.tf`
+
+**역할:** 이 VM만의 리소스 정보(이름 접미사, 사이즈, 사용자 등)를 기본값으로 정의. **아래 변수의 기본값만** Pilot용으로 바꿉니다.
+
+| 변수 | 수정 예시 | 설명 |
+|------|-----------|------|
+| `vm_name_suffix` | `"pilot-vm"` | VM 이름 접미사 (최종: `name_prefix-pilot-vm`) |
+| `vm_size` | `"Standard_B2s"` 등 | VM SKU |
+| `admin_username` | `"azureadmin"` | 로그인 계정 (필요 시 변경) |
+| `ssh_private_key_filename` | `"pilot_vm_key.pem"` | Compute 루트에 저장할 키 파일명 (기존 VM과 구분) |
+
+**예시 코드 (기본값만 변경):**
+
+```hcl
+variable "vm_name_suffix" {
+  description = "VM 이름 접미사. 최종 이름은 name_prefix-vm_name_suffix"
+  type        = string
+  default     = "pilot-vm"
+}
+
+variable "vm_size" {
+  type    = string
+  default = "Standard_B2s"
+}
+
+variable "admin_username" {
+  type    = string
+  default = "azureadmin"
+}
+
+variable "ssh_private_key_filename" {
+  description = "SSH 개인키 파일명 (compute 루트에 저장). .gitignore 대상"
+  type        = string
+  default     = "pilot_vm_key.pem"
+}
+```
+
+- 나머지 변수(`name_prefix`, `resource_group_name`, `subnet_id`, `application_security_group_ids` 등)는 루트 `main.tf`에서 전달하므로 이 폴더에서는 기본값만 맞추면 됩니다.
+
+#### 수정: `azure/dev/06.compute/main.tf`
+
+**역할:**  
+① Network state에서 Pilot Spoke 서브넷·RG 이름을 읽고,  
+② `linux-pilot-vm` 모듈을 **Spoke 구독**에 배치하며,  
+③ 동일한 방화벽 정책(ASG)을 적용해 Key Vault 접근을 허용합니다.
+
+**추가할 내용:**
+
+1) **locals 블록 안**에 Pilot용 서브넷·RG 참조 추가 (기존 `hub_rg`, `hub_subnet`, `asg_id_by_key` 등 아래):
+
+```hcl
+  # Pilot Spoke: Linux Pilot VM 배치용
+  spoke_pilot_rg      = try(data.terraform_remote_state.network.outputs.spoke_pilot_resource_group_name, null)
+  spoke_pilot_subnet  = try(data.terraform_remote_state.network.outputs.spoke_pilot_subnet_ids["pilot-snet"], null)
+```
+
+2) **module 블록** 추가 (예: `module "windows_example"` 아래):
+
+```hcl
+#--------------------------------------------------------------
+# Linux Pilot VM (Spoke Pilot VNet, Key Vault 접근용 ASG 적용)
+#--------------------------------------------------------------
+module "linux_pilot_vm" {
+  source = "./linux-pilot-vm"
+
+  providers = {
+    azurerm = azurerm.spoke
+  }
+
+  name_prefix                   = local.name_prefix
+  resource_group_name           = local.spoke_pilot_rg
+  subnet_id                     = local.spoke_pilot_subnet
+  location                      = var.location
+  tags                          = var.tags
+  application_security_group_ids = local.asg_ids
+}
+```
+
+- `application_security_group_ids = local.asg_ids`: 루트의 `application_security_group_keys`(기본값 `["keyvault_clients", "vm_allowed_clients"]`)가 Network state의 `keyvault_clients_asg_id` 등으로 해석된 목록입니다. 이걸 그대로 쓰면 Pilot VM NIC에도 Key Vault 접근용 ASG가 붙습니다.
+- `spoke_pilot_rg`, `spoke_pilot_subnet`이 `null`이면 Network 스택에 Pilot Spoke 출력이 없다는 뜻이므로, 먼저 01.network apply가 필요합니다.
+
+#### 수정: `azure/dev/06.compute/outputs.tf`
+
+**역할:** RBAC 스택에서 Pilot VM의 Managed Identity를 Key Vault 권한 부여에 사용할 수 있도록 출력 추가.
+
+파일 **끝**에 다음을 **추가**합니다.
+
+```hcl
+# Pilot VM (Spoke) — RBAC에서 Hub Key Vault 권한 부여 시 사용
+output "pilot_vm_identity_principal_id" {
+  description = "Linux Pilot VM Managed Identity principal ID (RBAC Key Vault 역할 부여용)"
+  value       = module.linux_pilot_vm.identity_principal_id
+}
+```
+
+- 필요 시 `linux_pilot_vm_id`, `linux_pilot_vm_name`, `linux_pilot_vm_private_ip` 등도 동일한 방식으로 출력할 수 있습니다.
+
+### 5.5 권한: Hub Key Vault 접근 (RBAC)
+
+**목표:** Hub에 있는 Key Vault(storage 스택에서 생성)에 대해 Pilot VM의 Managed Identity에 **Key Vault Secrets User**, **Key Vault Reader** 역할을 부여합니다.
+
+#### 수정: `azure/dev/07.rbac/main.tf`
+
+**역할:**  
+① Compute state에서 Pilot VM의 `principal_id`를 읽고,  
+② 해당 principal에 Hub Key Vault scope로 역할 할당 리소스를 추가합니다.
+
+**추가할 내용:**
+
+1) **locals 블록 안**에 Pilot VM principal 참조 추가 (기존 `vm_principal_id` 등 근처):
+
+```hcl
+  # Pilot VM (Spoke) Identity — Hub Key Vault 권한 부여용
+  pilot_vm_principal_id = try(data.terraform_remote_state.compute.outputs.pilot_vm_identity_principal_id, null)
+  enable_pilot_vm_keyvault_roles = var.enable_key_vault_roles && local.pilot_vm_principal_id != null && try(data.terraform_remote_state.storage.outputs.key_vault_id, null) != null
+```
+
+2) **역할 할당 리소스** 추가 (기존 `azurerm_role_assignment.vm_key_vault_reader` 블록 **아래**):
+
+```hcl
+#--------------------------------------------------------------
+# Hub: Pilot VM (Spoke) → Key Vault (Secrets User, Reader)
+#--------------------------------------------------------------
+resource "azurerm_role_assignment" "pilot_vm_key_vault_access" {
+  count = local.enable_pilot_vm_keyvault_roles ? 1 : 0
+
+  provider = azurerm.hub
+
+  scope                = data.terraform_remote_state.storage.outputs.key_vault_id
+  role_definition_name  = "Key Vault Secrets User"
+  principal_id         = local.pilot_vm_principal_id
+}
+
+resource "azurerm_role_assignment" "pilot_vm_key_vault_reader" {
+  count = local.enable_pilot_vm_keyvault_roles ? 1 : 0
+
+  provider = azurerm.hub
+
+  scope                = data.terraform_remote_state.storage.outputs.key_vault_id
+  role_definition_name  = "Key Vault Reader"
+  principal_id         = local.pilot_vm_principal_id
+}
+```
+
+- `enable_key_vault_roles`가 이미 `terraform.tfvars`에서 `true`로 설정되어 있으면, Pilot VM이 배포된 후 RBAC apply 시 위 역할이 부여됩니다.
+- **복제할 폴더 없음.** `07.rbac/main.tf`만 수정합니다.
+
+### 5.6 배포 순서 요약
+
+1. **01.network**  
+   - `spoke-vnet` → `spoke-vnet-pilot` 복제 후 `spoke-vnet-pilot/variables.tf` 수정  
+   - `main.tf`에 `module "spoke_vnet_pilot"` 추가  
+   - `outputs.tf`에 `spoke_pilot_resource_group_name`, `spoke_pilot_subnet_ids` 추가  
+   - `terraform.tfvars`에서 `enable_keyvault_sg`, `enable_pe_inbound_from_asg` 등 설정  
+   - `terraform init -backend-config=backend.hcl && terraform plan -var-file=terraform.tfvars && terraform apply -var-file=terraform.tfvars`
+
+2. **06.compute**  
+   - `linux-monitoring-vm` → `linux-pilot-vm` 복제 후 `linux-pilot-vm/variables.tf` 수정  
+   - `main.tf`에 `spoke_pilot_*` locals 및 `module "linux_pilot_vm"` 추가  
+   - `outputs.tf`에 `pilot_vm_identity_principal_id` 추가  
+   - `terraform init -backend-config=backend.hcl && terraform plan -var-file=terraform.tfvars && terraform apply -var-file=terraform.tfvars`
+
+3. **07.rbac**  
+   - `main.tf`에 `pilot_vm_principal_id`·`enable_pilot_vm_keyvault_roles` locals 및 Pilot VM용 Key Vault 역할 할당 2개 추가  
+   - `terraform init -backend-config=backend.hcl && terraform plan -var-file=terraform.tfvars && terraform apply -var-file=terraform.tfvars`
+
+### 5.7 파일별 체크리스트
+
+| 파일 | 작업 |
+|------|------|
+| `01.network/spoke-vnet-pilot/variables.tf` | 폴더 복제 후 `rg_suffix`, `vnet_suffix`, `vnet_address_space`, `subnets` 기본값 수정 |
+| `01.network/main.tf` | `module "spoke_vnet_pilot" { ... }` 블록 추가 |
+| `01.network/outputs.tf` | `spoke_pilot_resource_group_name`, `spoke_pilot_subnet_ids` output 추가 |
+| `01.network/terraform.tfvars` | `enable_keyvault_sg`, `hub_nsg_keys_add_keyvault_rule`, `enable_pe_inbound_from_asg` 설정 |
+| `06.compute/linux-pilot-vm/variables.tf` | 폴더 복제 후 `vm_name_suffix`, `vm_size`, `admin_username`, `ssh_private_key_filename` 등 기본값 수정 |
+| `06.compute/main.tf` | `spoke_pilot_rg`, `spoke_pilot_subnet` locals 및 `module "linux_pilot_vm"` 추가 |
+| `06.compute/outputs.tf` | `pilot_vm_identity_principal_id` output 추가 |
+| `07.rbac/main.tf` | `pilot_vm_principal_id`, `enable_pilot_vm_keyvault_roles` locals 및 Pilot VM용 Key Vault 역할 할당 2개 추가 |
+
+위 순서대로 복제·수정 후 각 스택을 순서대로 적용하면, 새 Pilot VNet 위의 Linux 서버에서 Hub Key Vault로 방화벽·권한이 모두 적용된 상태로 접속할 수 있습니다.
+
+---
+
+## 6. 참고 링크
 
 - **스택별 상세 가이드**: 각 스택 디렉터리의 `README.md` (예: `azure/dev/01.network/README.md`, `azure/dev/06.compute/README.md`).  
   - 각 스택 README에는 **「0. 복사/붙여넣기용 배포 명령어」** 절이 있어, 명령어 블록을 그대로 복사해 터미널에 붙여넣기만 하면 됩니다.  
