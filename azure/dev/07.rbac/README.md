@@ -10,6 +10,44 @@ State 1개(`azure/dev/07.rbac/terraform.tfstate`), 그룹별 하위 디렉터리
 
 ---
 
+## 파일·디렉터리 역할 및 배포 시 수정 위치
+
+### 스택 루트 파일
+
+| 파일 | 역할 | 주로 수정하는 내용 |
+|------|------|-------------------|
+| `main.tf` | remote_state(compute, network, storage, ai_services, apim), `azurerm_role_assignment`, 그룹 모듈 호출 | 역할 할당 블록 추가·제거, 그룹 모듈 연결 |
+| `variables.tf` | 루트 변수 선언 | `enable_*`, 그룹 Object ID·scope·멤버, `iam_role_assignments` 등 |
+| `terraform.tfvars` | 실제 값 | **대부분의 권한·멤버십 값은 여기서만 변경** |
+| `backend.tf` / `backend.hcl` | 원격 state | Bootstrap 연동 |
+| `provider.tf` | `azurerm`·`azuread` | 구독·테넌트 인증 |
+| `outputs.tf` | (정의 시) 출력 | |
+
+### 하위 디렉터리(그룹·멤버 모듈)
+
+| 디렉터리 | 역할 | 수정 원칙 |
+|----------|------|-----------|
+| `admin-group/`, `ai-developer-group/` 등 | 그룹에 RBAC 역할 부여 | **역할 이름**은 각 폴더 `variables.tf` **기본값** |
+| `admin-group/admin-users/` 등 | Entra ID 그룹 **멤버십** | 멤버 목록은 **루트 `terraform.tfvars`**의 `*_member_object_ids` |
+
+### terraform.tfvars 변수(의미) 예시
+
+| 변수 | 의미 |
+|------|------|
+| `enable_monitoring_vm_roles` | Monitoring VM MI에 대해 사전 정의된 역할 할당을 켤지 여부 |
+| `enable_key_vault_roles` | Key Vault 관련 역할 할당 켤지 여부 |
+| `admin_group_object_id` / `admin_group_scope_id` / `admin_group_member_object_ids` | 관리자 그룹 ID, 역할 부여 범위(RG/구독 ID), 멤버 Object ID 목록 |
+| `ai_developer_group_*` | AI 개발자 그룹용 동일 패턴 |
+| `iam_role_assignments` | (시나리오 2) 임의 principal·역할·scope_ref 조합 목록. `scope_ref`는 코드에 정의된 키(`storage_key_vault_id`, `apim_id` 등) |
+
+### 신규 역할·그룹 추가 절차
+
+1. **Monitoring VM에 역할 하나 더**: 루트 `main.tf`에 `azurerm_role_assignment` 추가 → `principal_id` = `local.vm_principal_id`, `scope` = remote_state 출력 → plan/apply.  
+2. **신규 그룹 모듈**: 기존 `admin-group` 등 **폴더 복사** → 복사본 `variables.tf`에서 역할명 기본값 → 루트에 `module` + `variables.tf` + `terraform.tfvars`에 Object ID·scope·멤버만 추가.  
+3. **리소스별 IAM만**: `iam_role_assignments`에 항목 추가(의미는 `terraform.tfvars.example` 주석 참고).
+
+---
+
 ## 0. 복사/붙여넣기용 배포 명령어 (처음 배포 시)
 
 프로젝트 루트에서 시작한다고 가정합니다. **선행:** compute, network, storage, ai-services, apim apply 완료.

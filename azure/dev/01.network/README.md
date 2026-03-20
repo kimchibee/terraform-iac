@@ -10,6 +10,40 @@ State 1개(`azure/dev/01.network/terraform.tfstate`), 하위 디렉터리(hub-vn
 
 ---
 
+## 파일·디렉터리 역할 및 배포 시 수정 위치
+
+### 스택 루트 파일
+
+| 파일 | 역할 | 주로 수정하는 내용 |
+|------|------|-------------------|
+| `main.tf` | `locals`, `module` 호출(hub-vnet, spoke-vnet, keyvault-sg, vm-access-sg), 데이터 소스 | 모듈 추가/삭제, Hub·Spoke 연결 인자, 옵션 모듈 활성화 시 |
+| `variables.tf` | 루트 변수 선언·기본값 | Hub 공통 옵션·플래그 추가 시(신규 Spoke 전용 변수는 두지 않음) |
+| `terraform.tfvars` | 배포에 쓰는 실제 값 | **구독 ID**, **backend**(`backend_*`), **Hub** 주소 공간·서브넷(`hub_vnet_address_space`, `hub_subnets`), `enable_keyvault_sg`, `enable_vm_access_sg` 등 |
+| `backend.tf` | 원격 backend(`azurerm`) 설정 | `backend.hcl`의 키·스토리지와 일치하도록 유지. 보통 스크립트 생성 후 변경 최소 |
+| `backend.hcl` | RG·Storage Account·컨테이너·state **키** | Bootstrap 후 `./scripts/generate-backend-hcl.sh`로 생성. state 키 이전 시만 수동 조정 |
+| `provider.tf` | `azurerm.hub` / `azurerm.spoke`, `azapi`, `random` | 구독은 `terraform.tfvars`의 `hub_subscription_id`·`spoke_subscription_id`와 연동. 코드 수정은 드묾 |
+| `outputs.tf` | 다른 스택이 읽는 출력 | 출력 항목 추가/변경 시 |
+| `versions.tf` | Terraform·provider 버전 | 업그레이드 시 |
+| `.terraform.lock.hcl` | provider 잠금 | `terraform init` 시 갱신 |
+
+### 하위 디렉터리(모듈)
+
+| 디렉터리 | 역할 | 신규/변경 시 수정 |
+|----------|------|-------------------|
+| `hub-vnet/` | Hub VNet 래퍼(Git `hub-vnet` 호출) | Hub 전용 인자는 루트 `main.tf`·`terraform.tfvars`에서 전달 |
+| `spoke-vnet/` | Spoke VNet 래퍼 | **폴더 복사 후 해당 폴더 `variables.tf`만** 수정(`rg_suffix`, `vnet_address_space`, `subnets` 등) |
+| `keyvault-sg/`, `vm-access-sg/` | 옵션 NSG/ASG | 루트 `terraform.tfvars`의 플래그·키로 제어, 세부는 각 폴더 코드 |
+
+### 신규 리소스 생성 시 변수(의미)
+
+| 작업 | 어디를 수정하는가 | 변수·의미 |
+|------|-------------------|-----------|
+| **신규 Spoke VNet** | 복사한 `spoke-vnet-xx/variables.tf` | `rg_suffix`/`vnet_suffix`: RG·VNet 이름 구분자. `vnet_address_space`: Spoke CIDR. `subnets`: 서브넷 이름·프리픽스 |
+| **Hub 서브넷·주소 변경** | `terraform.tfvars` (+ 필요 시 `main.tf` locals) | `hub_vnet_address_space`, `hub_subnets`: Hub VNet 및 서브넷 정의 |
+| **Key Vault PE/ASG 시나리오** | `terraform.tfvars` | `enable_keyvault_sg`, `hub_nsg_keys_add_keyvault_rule`, `enable_pe_inbound_from_asg` 등: PE·NSG·ASG 연동 방식 |
+
+---
+
 ## 0. 복사/붙여넣기용 배포 명령어 (처음 배포 시)
 
 아래 블록을 **순서대로** 터미널에 복사해 붙여넣기만 하면 됩니다. 프로젝트 루트(`terraform-iac/`)에서 시작한다고 가정합니다.

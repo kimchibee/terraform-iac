@@ -5,6 +5,35 @@ Hub ↔ Spoke **VNet Peering** 및 Hub 측 **진단 설정**을 관리하는 스
 
 ---
 
+## 파일·디렉터리 역할 및 배포 시 수정 위치
+
+### 스택 루트 파일
+
+| 파일 | 역할 | 주로 수정하는 내용 |
+|------|------|-------------------|
+| `main.tf` | remote_state(network, storage, shared_services), `vnet-peering` 모듈(Hub↔Spoke), `azurerm_monitor_diagnostic_setting` 등 | 피어링·진단 대상 리소스 ID 연결, 진단 로그 카테고리 추가 |
+| `variables.tf` | `project_name`, 구독 ID, backend 변수 | 변수 선언 |
+| `terraform.tfvars` | 실제 값 | 아래 **변수 표** 참고 |
+| `backend.tf` / `backend.hcl` | 원격 state | Bootstrap과 동일 |
+| `provider.tf` | `azurerm.hub`, `azurerm.spoke`(피어링은 양쪽 구독 작업 가능) | 구독 ID는 tfvars와 일치 |
+| `outputs.tf` | (정의된 경우) 출력 | 다른 자동화 연동 시 |
+
+### terraform.tfvars 변수(의미)
+
+| 변수 | 의미 |
+|------|------|
+| `project_name` | 이름 접두사(모듈·리소스 네이밍과 연동되는 경우 확인) |
+| `hub_subscription_id` | Hub 쪽 VNet·진단 리소스가 있는 구독 |
+| `spoke_subscription_id` | Spoke 쪽 VNet이 있는 구독 |
+| `backend_*` | 선행 스택 state를 읽기 위한 Storage Backend 정보 |
+
+### 신규 리소스 추가 절차
+
+1. **진단 설정 추가**: `main.tf`에 `azurerm_monitor_diagnostic_setting` 추가 → `target_resource_id`는 `data.terraform_remote_state.network` 등 출력 사용 → `storage_account_id`는 storage state의 monitoring Storage ID 등 → `terraform plan` / `apply`.  
+2. **피어링 패턴 변경**: Git 모듈 `vnet-peering` 인자 또는 `main.tf`의 module 블록 수정 → 필요 시 terraform-modules 레포 수정 후 `init -upgrade`.
+
+---
+
 ## 0. 복사/붙여넣기용 배포 명령어 (처음 배포 시)
 
 프로젝트 루트에서 시작한다고 가정합니다. **선행:** network, storage, shared-services apply 완료.

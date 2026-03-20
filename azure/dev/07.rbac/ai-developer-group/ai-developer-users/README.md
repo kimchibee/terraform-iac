@@ -1,6 +1,15 @@
 # ai-developer-users — 멤버십 등록/변경/삭제
 
-이 디렉터리는 **Terraform**으로 AI 개발자 그룹의 **멤버십**을 등록·변경·삭제합니다.
+이 디렉터리는 **Terraform**으로 AI 개발자 그룹의 **멤버십**을 등록·변경·삭제합니다.  
+**plan/apply는 rbac 스택 루트(`azure/dev/07.rbac`)에서만** 실행합니다.
+
+## 디렉터리·파일 역할
+
+| 파일 | 역할 |
+|------|------|
+| `main.tf` | `azuread_group_member`: 멤버 목록을 Terraform이 선언적으로 관리 |
+| `variables.tf` | `group_object_id`, `member_object_ids` (값은 상위 모듈·루트에서 전달) |
+| `versions.tf` | `azuread` provider 버전 |
 
 ## 사용 방법
 

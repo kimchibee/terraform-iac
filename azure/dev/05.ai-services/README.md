@@ -5,6 +5,40 @@ Azure OpenAI, AI Foundry(ML Workspace, ACR, Storage, Application Insights), Spok
 
 ---
 
+## 파일·디렉터리 역할 및 배포 시 수정 위치
+
+### 스택 루트 파일
+
+| 파일 | 역할 | 주로 수정하는 내용 |
+|------|------|-------------------|
+| `main.tf` | remote_state(network, storage, shared_services), Git 모듈 `spoke-workloads` 호출(OpenAI·AI Foundry 등) | 모듈 인자, 리소스 조합 |
+| `locals.tf` | (있는 경우) 이름·로컬 계산 | 네이밍 규칙 변경 시 |
+| `variables.tf` | 변수 선언 | 새 변수 추가 시 |
+| `terraform.tfvars` | 실제 배포 값 | 아래 **terraform.tfvars 변수 표** 참고 |
+| `backend.tf` / `backend.hcl` | 원격 state | Bootstrap과 동일 |
+| `provider.tf` | 기본 provider = **Spoke 구독** | OpenAI·Spoke 리소스 생성 구독 |
+| `outputs.tf` | OpenAI ID, Storage ID, Key Vault ID 등 | rbac 등이 참조 |
+
+### terraform.tfvars에서 다루는 변수(의미)
+
+| 변수 | 의미 |
+|------|------|
+| `project_name`, `environment`, `location`, `tags` | 접두사·환경·리전·태그 |
+| `spoke_subscription_id` | 이 스택의 기본 provider가 사용하는 **Spoke 구독 ID** |
+| `backend_*` | 각 선행 스택 state를 읽기 위한 **Backend Blob 위치** |
+| `enable_spoke_to_hub_peering` | Spoke→Hub 피어링을 이 모듈에서 생성할지. **connectivity에서 관리 시 `false`** |
+| `enable_private_dns_zone_links` | DNS Zone Link를 여기서 생성할지. **network에서 관리 시 `false`** |
+| `enable_pep_nsg` | Spoke PEP NSG를 여기서 생성할지. **network에서 관리 시 `false`** |
+| `openai_sku` | Cognitive Services(OpenAI) 계정 SKU(예: `S0`) |
+| `openai_deployments` | 모델 배포 목록. 각 항목: `name`(배포 이름), `model_name`(모델 ID), `version`(API 버전), `capacity`(TPM 등 용량). **쿼터 없으면 `[]`로 두고 인프라만 배포** |
+
+### 신규 리소스·모델 추가 절차
+
+1. **모델 배포 추가**: `terraform.tfvars`의 `openai_deployments`에 블록 추가 → `terraform plan` / `apply`.  
+2. **모듈에만 있는 리소스 옵션**: `variables.tf`·`main.tf` 수정 또는 **terraform-modules** 레포 수정 후 `terraform init -backend-config=backend.hcl -upgrade`.
+
+---
+
 ## 0. 복사/붙여넣기용 배포 명령어 (처음 배포 시)
 
 프로젝트 루트에서 시작한다고 가정합니다. **선행:** network, storage, shared-services apply 완료.
@@ -16,7 +50,7 @@ cp terraform.tfvars.example terraform.tfvars
 ```
 
 **2단계: terraform.tfvars 수정**  
-- `hub_subscription_id`, `spoke_subscription_id`, `backend_*`  
+- `spoke_subscription_id`, `backend_*`  
 - `openai_sku`, `openai_deployments` (쿼터 승인 전에는 `openai_deployments = []` 로 두고 배포 가능)
 
 **3단계: init / plan / apply (한 블록 통째로 복사 후 실행)**
@@ -34,7 +68,7 @@ apply 시 `yes` 입력.
 ```bash
 cd azure/dev/05.ai-services
 cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars 편집: 구독 ID, backend 변수, openai_sku, openai_deployments 등
+# terraform.tfvars 편집: spoke_subscription_id, backend 변수, openai_sku, openai_deployments 등
 terraform init -backend-config=backend.hcl
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
@@ -53,7 +87,7 @@ terraform apply -var-file=terraform.tfvars
 ```bash
 cd azure/dev/05.ai-services
 cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars 편집: hub_subscription_id, spoke_subscription_id, backend 변수, openai_sku, openai_deployments 등
+# terraform.tfvars 편집: spoke_subscription_id, backend 변수, openai_sku, openai_deployments 등
 terraform init -backend-config=backend.hcl
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
@@ -68,7 +102,7 @@ terraform apply -var-file=terraform.tfvars
 | 3. **remote_state: network** | Hub/Spoke VNet·서브넷·Private DNS Zone ID. OpenAI·PE·ML Workspace 배치용. | `azure/dev/01.network/terraform.tfstate`. **선행:** network apply 완료. |
 | 4. **remote_state: storage** | Key Vault, Storage 계정 ID 등. | `azure/dev/02.storage/terraform.tfstate` |
 | 5. **remote_state: shared_services** | Log Analytics 등. | `azure/dev/03.shared-services/terraform.tfstate` |
-| 6. 구독 결정 | OpenAI·Key Vault 등은 **Hub 구독**, Spoke 쪽 PE 등은 **Spoke 구독**에 생성될 수 있음. | `provider.tf`: hub / spoke 구독 변수 |
+| 6. 구독 결정 | 이 스택의 기본 provider는 **Spoke 구독**. 모듈 내부에서 Hub/Spoke 리소스 조합은 `main.tf`·모듈 정의 따름. | `provider.tf`: `spoke_subscription_id` |
 | 7. 모듈 호출 | OpenAI, AI Foundry(ML Workspace, ACR, Storage), Spoke PE 등 생성. 서브넷 ID·DNS Zone·RG는 network/storage/shared_services state에서 전달. | 각 remote_state outputs → 모듈 인자 |
 | 8. Output 기록 | `openai_id`, `key_vault_id`, `storage_account_id` 등. rbac 등이 참조. | `outputs.tf` |
 

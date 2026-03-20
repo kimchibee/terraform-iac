@@ -1,6 +1,15 @@
 # admin-users — 멤버십 등록/변경/삭제
 
-이 디렉터리는 **Terraform**으로 관리자 그룹의 **멤버십**을 등록·변경·삭제합니다.
+이 디렉터리는 **Terraform**으로 관리자 그룹의 **멤버십**을 등록·변경·삭제합니다.  
+**plan/apply는 rbac 스택 루트(`azure/dev/07.rbac`)에서만** 실행합니다.
+
+## 디렉터리·파일 역할
+
+| 파일 | 역할 |
+|------|------|
+| `main.tf` | `azuread_group_member`: `member_object_ids`에 있는 Object ID만 그룹 멤버로 유지 |
+| `variables.tf` | `group_object_id`, `member_object_ids` 선언(값은 상위 `admin-group` 모듈·루트에서 전달) |
+| `versions.tf` | `azuread` provider 버전 |
 
 ## 사용 방법
 
