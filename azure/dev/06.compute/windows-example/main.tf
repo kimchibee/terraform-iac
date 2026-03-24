@@ -1,22 +1,48 @@
-#--------------------------------------------------------------
-# Windows VM 모듈 (compute 루트에서 module로 호출)
-# 루트는 컨텍스트(name_prefix, rg, subnet, location, tags, ASG, admin_password)만 전달.
-# 리소스 정보(사이즈, 이름 접미사, admin_username, vm_extensions)는 이 폴더 variables.tf 기본값으로 관리.
-#
-# [신규 Windows VM 추가 시 이 폴더를 통째로 복사한 뒤]
-# 1. 폴더명 변경: 예) windows-example → windows-app-02
-# 2. 이 폴더에서만 수정: variables.tf 의 vm_name_suffix, vm_size, admin_username, vm_extensions 등 기본값
-# 3. 루트 main.tf: module "windows_app_02" { source = "./windows-app-02"; ...; admin_password = var.windows_app_02_admin_password } 추가
-#    루트 variables.tf / tfvars: 해당 Windows VM용 admin_password 만 추가 (보안상 루트에만 둠)
-#--------------------------------------------------------------
+data "terraform_remote_state" "network" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = var.backend_resource_group_name
+    storage_account_name = var.backend_storage_account_name
+    container_name       = var.backend_container_name
+    key                  = "azure/dev/01.network/vnet/hub-vnet/terraform.tfstate"
+  }
+}
+
+data "terraform_remote_state" "network_subnet_hub" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = var.backend_resource_group_name
+    storage_account_name = var.backend_storage_account_name
+    container_name       = var.backend_container_name
+    key                  = "azure/dev/01.network/subnet/hub-pep-subnet/terraform.tfstate"
+  }
+}
+
+data "terraform_remote_state" "monitoring_subnet" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = var.backend_resource_group_name
+    storage_account_name = var.backend_storage_account_name
+    container_name       = var.backend_container_name
+    key                  = "azure/dev/01.network/subnet/hub-monitoring-vm-subnet/terraform.tfstate"
+  }
+}
 
 locals {
-  vm_name       = "${var.name_prefix}-${var.vm_name_suffix}"       # Azure 리소스명 (길어도 됨, 예: test-x-x-win-example)
-  computer_name = "${var.name_prefix}-${var.vm_computer_name_suffix}" # Windows 호스트명, 15자 이하 (예: test-x-x-winex)
+  name_prefix = "${var.project_name}-x-x"
+  hub_rg      = data.terraform_remote_state.network.outputs.hub_resource_group_name
+  hub_subnet  = data.terraform_remote_state.monitoring_subnet.outputs.hub_subnet_id
+  asg_id_by_key = {
+    "keyvault_clients"   = try(data.terraform_remote_state.network_subnet_hub.outputs.keyvault_clients_asg_id, null)
+    "vm_allowed_clients" = try(data.terraform_remote_state.network_subnet_hub.outputs.vm_allowed_clients_asg_id, null)
+  }
+  asg_ids       = [for k in var.application_security_group_keys : local.asg_id_by_key[k] if try(local.asg_id_by_key[k], null) != null]
+  vm_name       = "${local.name_prefix}-${var.vm_name_suffix}"
+  computer_name = "${local.name_prefix}-${var.vm_computer_name_suffix}"
 }
 
 module "vm" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=main"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=chore/avm-wave1-modules-prune-and-convert"
   count  = var.enable_vm ? 1 : 0
 
   providers = {
@@ -28,8 +54,8 @@ module "vm" {
   os_type              = "windows"
   size                 = var.vm_size
   location             = var.location
-  resource_group_name  = var.resource_group_name
-  subnet_id            = var.subnet_id
+  resource_group_name  = local.hub_rg
+  subnet_id            = local.hub_subnet
   admin_username       = var.admin_username
   admin_password       = var.admin_password
   admin_ssh_public_key = ""
@@ -38,9 +64,8 @@ module "vm" {
   vm_extensions        = var.vm_extensions
 }
 
-# Network 스택 방화벽 정책(ASG) 반영: NIC에 ASG 연결
 resource "azurerm_network_interface_application_security_group_association" "asg" {
-  for_each                        = var.enable_vm && length(var.application_security_group_ids) > 0 ? toset(var.application_security_group_ids) : toset([])
-  network_interface_id            = module.vm[0].network_interface_id
-  application_security_group_id  = each.value
+  for_each                      = var.enable_vm && length(local.asg_ids) > 0 ? toset(local.asg_ids) : toset([])
+  network_interface_id          = module.vm[0].network_interface_id
+  application_security_group_id = each.value
 }

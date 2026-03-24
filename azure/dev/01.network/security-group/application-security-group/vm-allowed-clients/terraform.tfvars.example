@@ -1,0 +1,23 @@
+# Hub에 사용할 Azure 구독 ID (GUID)
+hub_subscription_id = "f6e816bf-6df7-4fb5-953c-12507dc60879"
+
+# 원격 state 저장소의 리소스 그룹명 (bootstrap/backend와 동일)
+backend_resource_group_name = "terraform-state-rg"
+
+# 원격 state 저장소의 스토리지 계정명 (bootstrap/backend와 동일)
+backend_storage_account_name = "tfstate7dc60879"
+
+# 원격 state 컨테이너명 (기본값: tfstate)
+backend_container_name = "tfstate"
+
+# ASG 생성 여부 (true 권장)
+enabled = true
+
+# 생성할 ASG 이름
+asg_name = "vm-allowed-clients-asg"
+
+# 공통 태그 (필요 시 key/value 추가)
+tags = {
+  ManagedBy = "Terraform"
+  Environment = "dev"
+}

@@ -6,14 +6,13 @@
 # - 로컬: 프로젝트 루트에서 ./scripts/generate-backend-hcl.sh
 # - CI: REPO_ROOT(또는 GITHUB_WORKSPACE/CI_PROJECT_DIR) 기준으로 실행 가능
 # (Bootstrap 적용 후 실행. bootstrap/backend/terraform.tfvars 가 있어야 함.)
-# - 스택 디렉터리: azure/dev/01.network, 02.storage, ... (배포 순서 접두사)
+# - 피드백1: 01~06 은 **리프 경로**마다 state 1개 (apply는 리프에서만)
 #-----------------------------------------------------------------------------
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# GitHub Actions(GITHUB_WORKSPACE) / GitLab Runner(CI_PROJECT_DIR) 사용 시 해당 경로로 사용
 REPO_ROOT="${GITHUB_WORKSPACE:-${CI_PROJECT_DIR:-$REPO_ROOT}}"
 BOOTSTRAP_TFVARS="$REPO_ROOT/bootstrap/backend/terraform.tfvars"
 
@@ -22,7 +21,6 @@ if [[ ! -f "$BOOTSTRAP_TFVARS" ]]; then
   exit 1
 fi
 
-# HCL key = "value" 형태에서 value만 추출 (macOS/BSD sed 호환: [[:space:]] 사용)
 get_var() {
   grep -E "^[[:space:]]*${1}[[:space:]]*=" "$BOOTSTRAP_TFVARS" | sed -nE 's/.*=[[:space:]]*"([^"]+)".*/\1/p' | tr -d ' \r'
 }
@@ -36,36 +34,99 @@ if [[ -z "$resource_group_name" || -z "$storage_account_name" || -z "$container_
   exit 1
 fi
 
-# 배포 순서대로 디렉터리명 (접두사 01. ~ 08.)
-STACKS=(01.network 02.storage 03.shared-services 04.apim 05.ai-services 06.compute 07.rbac 08.connectivity)
-# compute 하위는 모듈로만 사용. backend는 compute 루트 1개
+# 01~06 인프라 리프 (배포 순서)
+INFRA_LEAVES=(
+  "01.network/resource-group/hub-rg"
+  "01.network/application-security-group/keyvault-clients"
+  "01.network/application-security-group/vm-allowed-clients"
+  "01.network/network-security-group/keyvault-standalone"
+  "01.network/network-security-group/hub-monitoring-vm"
+  "01.network/network-security-group/hub-pep"
+  "01.network/network-security-group/spoke-pep"
+  "01.network/vnet/hub-vnet"
+  "01.network/subnet/hub-gateway-subnet"
+  "01.network/subnet/hub-dnsresolver-inbound-subnet"
+  "01.network/subnet/hub-azurefirewall-subnet"
+  "01.network/subnet/hub-azurefirewall-management-subnet"
+  "01.network/subnet/hub-appgateway-subnet"
+  "01.network/subnet/hub-monitoring-vm-subnet"
+  "01.network/security-policy/hub-sg-policy-default"
+  "01.network/subnet/hub-pep-subnet"
+  "01.network/resource-group/spoke-rg"
+  "01.network/vnet/spoke-vnet"
+  "01.network/subnet/spoke-apim-subnet"
+  "01.network/subnet/spoke-pep-subnet"
+  "01.network/security-policy/spoke-sg-policy-default"
+  "01.network/network-security-rule/hub-monitoring-vm-allow-keyvault-outbound"
+  "01.network/network-security-rule/hub-pep-allow-keyvault-outbound"
+  "01.network/network-security-rule/hub-pep-allow-keyvault-clients-443"
+  "01.network/network-security-rule/hub-monitoring-vm-allow-vm-clients-22"
+  "01.network/network-security-rule/hub-monitoring-vm-allow-vm-clients-3389"
+  "01.network/subnet-network-security-group-association/hub-monitoring-vm-subnet"
+  "01.network/subnet-network-security-group-association/hub-pep-subnet"
+  "01.network/subnet-network-security-group-association/spoke-pep-subnet"
+  "01.network/public-ip/hub-vpn-gateway"
+  "01.network/virtual-network-gateway/hub-vpn-gateway"
+  "01.network/dns-private-resolver/hub"
+  "01.network/dns-private-resolver-inbound-endpoint/hub"
+  "01.network/private-dns-zone/hub-blob"
+  "01.network/private-dns-zone/hub-vault"
+  "01.network/private-dns-zone/spoke-azure-api"
+  "01.network/private-dns-zone/spoke-openai"
+  "01.network/private-dns-zone/spoke-cognitiveservices"
+  "01.network/private-dns-zone/spoke-ml"
+  "01.network/private-dns-zone/spoke-notebooks"
+  "01.network/private-dns-zone-vnet-link/hub-blob-to-hub-vnet"
+  "01.network/private-dns-zone-vnet-link/hub-vault-to-hub-vnet"
+  "01.network/private-dns-zone-vnet-link/spoke-azure-api-to-spoke-vnet"
+  "01.network/private-dns-zone-vnet-link/spoke-openai-to-spoke-vnet"
+  "01.network/private-dns-zone-vnet-link/spoke-cognitiveservices-to-spoke-vnet"
+  "01.network/private-dns-zone-vnet-link/spoke-ml-to-spoke-vnet"
+  "01.network/private-dns-zone-vnet-link/spoke-notebooks-to-spoke-vnet"
+  "01.network/route/hub-route-default"
+  "01.network/route/spoke-route-default"
+  "02.storage/monitoring"
+  "03.shared-services/log-analytics"
+  "03.shared-services/shared"
+  "04.apim/workload"
+  "05.ai-services/workload"
+)
+
+# 06 compute — VM별 리프
 COMPUTE_SUBDIRS=(linux-monitoring-vm windows-example)
+
+# 07.identity / 08.rbac 리프
+RBAC_IDENTITY_LEAVES=(
+  "07.identity/group-membership/admin-core"
+  "07.identity/group-membership/ai-developer-core"
+  "08.rbac/group/admin-hub-scope"
+  "08.rbac/group/ai-developer-spoke-scope"
+  "08.rbac/principal/hub-assignments"
+  "08.rbac/principal/spoke-assignments"
+  "08.rbac/authorization/hub-assignments"
+  "08.rbac/authorization/spoke-assignments"
+)
+
+# 09.connectivity 리프
+CONNECTIVITY_LEAVES=(
+  "09.connectivity/peering/hub-to-spoke"
+  "09.connectivity/peering/spoke-to-hub"
+  "09.connectivity/diagnostics/hub"
+)
+
 DEV_DIR="$REPO_ROOT/azure/dev"
 
-for stack in "${STACKS[@]}"; do
-  case "$stack" in
-    01.network)         key="azure/dev/01.network/terraform.tfstate" ;;
-    02.storage)         key="azure/dev/02.storage/terraform.tfstate" ;;
-    03.shared-services) key="azure/dev/03.shared-services/terraform.tfstate" ;;
-    04.apim)            key="azure/dev/04.apim/terraform.tfstate" ;;
-    05.ai-services)     key="azure/dev/05.ai-services/terraform.tfstate" ;;
-    06.compute)         key="azure/dev/06.compute/terraform.tfstate" ;;
-    07.rbac)            key="azure/dev/07.rbac/terraform.tfstate" ;;
-    08.connectivity)    key="azure/dev/08.connectivity/terraform.tfstate" ;;
-    *)                  echo "SKIP unknown stack: $stack" ; continue ;;
-  esac
-
-  dir="$DEV_DIR/$stack"
+write_backend_hcl() {
+  local dir="$1"
+  local key="$2"
+  local hcl="$dir/backend.hcl"
   if [[ ! -d "$dir" ]]; then
     echo "SKIP (디렉터리 없음): $dir"
-    continue
+    return
   fi
-
-  hcl="$dir/backend.hcl"
   if [[ -f "$hcl" ]]; then
     echo "OVERWRITE $hcl"
   fi
-
   cat > "$hcl" <<EOF
 resource_group_name  = "$resource_group_name"
 storage_account_name = "$storage_account_name"
@@ -73,27 +134,26 @@ container_name       = "$container_name"
 key                  = "$key"
 EOF
   echo "CREATED $hcl"
+}
+
+for leaf in "${INFRA_LEAVES[@]}"; do
+  key="azure/dev/${leaf}/terraform.tfstate"
+  write_backend_hcl "$DEV_DIR/$leaf" "$key"
 done
 
-# compute 하위 디렉터리별 backend.hcl (디렉터리 단위 VM 관리)
+for leaf in "${RBAC_IDENTITY_LEAVES[@]}"; do
+  key="azure/dev/${leaf}/terraform.tfstate"
+  write_backend_hcl "$DEV_DIR/$leaf" "$key"
+done
+
+for leaf in "${CONNECTIVITY_LEAVES[@]}"; do
+  key="azure/dev/${leaf}/terraform.tfstate"
+  write_backend_hcl "$DEV_DIR/$leaf" "$key"
+done
+
 for sub in "${COMPUTE_SUBDIRS[@]}"; do
-  dir="$DEV_DIR/06.compute/$sub"
-  if [[ ! -d "$dir" ]]; then
-    echo "SKIP (디렉터리 없음): $dir"
-    continue
-  fi
   key="azure/dev/06.compute/$sub/terraform.tfstate"
-  hcl="$dir/backend.hcl"
-  if [[ -f "$hcl" ]]; then
-    echo "OVERWRITE $hcl"
-  fi
-  cat > "$hcl" <<EOF
-resource_group_name  = "$resource_group_name"
-storage_account_name = "$storage_account_name"
-container_name       = "$container_name"
-key                  = "$key"
-EOF
-  echo "CREATED $hcl"
+  write_backend_hcl "$DEV_DIR/06.compute/$sub" "$key"
 done
 
-echo "Done. 각 스택에서 terraform init -backend-config=backend.hcl 후 plan/apply 하세요."
+echo "Done. 각 스택·리프 디렉터리에서 terraform init -backend-config=backend.hcl 후 plan/apply 하세요."

@@ -1,0 +1,44 @@
+#--------------------------------------------------------------
+# AI Services Stack Variables
+#--------------------------------------------------------------
+
+# General
+project_name = "test"
+environment  = "dev"
+location     = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Project     = "Azure-Hub-Spoke"
+}
+
+# Subscription
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Backend (Bootstrap의 terraform.tfvars와 동일하게 맞출 것)
+backend_resource_group_name  = "terraform-state-rg"
+backend_storage_account_name = "tfstate07dc60"
+backend_container_name       = "tfstate"
+
+# ---------------------------------------------------------------------------
+# Azure OpenAI 모델 배포 — 쿼터 승인 전에는 비활성화(빈 목록), 승인 후 수정 필요
+# ---------------------------------------------------------------------------
+# 쿼터가 없으면 모델 배포를 생성할 수 없으므로, 승인 후 재시도 시 아래를 수정합니다.
+# 1) openai_deployments = [] 를 제거하고
+# 2) 아래 중 사용할 모델 블록의 주석을 해제한 뒤 name/model_name/version/capacity 설정
+# 쿼터 확인: az cognitiveservices usage list --location koreacentral -o table
+# 쿼터 요청: https://aka.ms/oai/stuquotarequest
+# 상세: docs/AZURE-OPENAI-QUOTA-AND-MODELS.md
+# ---------------------------------------------------------------------------
+openai_sku = "S0"
+openai_deployments = []
+# AI Foundry/Private Endpoint (default true)
+enable_ai_foundry_workspace = true
+enable_private_endpoints    = true
+# 승인 후 재시도 시 아래 중 하나 주석 해제 후 사용. 나중에 수정 필요.
+# openai_deployments = [
+#   { name = "gpt-4o",       model_name = "gpt-4o",       version = "2024-05-13", capacity = 30 }
+#   { name = "gpt-4o-mini", model_name = "gpt-4o-mini", version = "2024-07-18", capacity = 10 }
+#   { name = "gpt-35-turbo", model_name = "gpt-35-turbo", version = "0613",     capacity = 10 }
+# ]
