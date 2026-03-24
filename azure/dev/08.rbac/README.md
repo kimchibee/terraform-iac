@@ -30,3 +30,7 @@ State 키: `azure/dev/<위 경로>/terraform.tfstate`
 3. `08.rbac/group/*` → `08.rbac/principal/*` → `08.rbac/authorization/*` (의존 관계에 맞게)
 
 `principal` 리프는 compute state에 Monitoring VM MI 출력이 있을 때 역할이 생성됩니다.
+
+## 현재 상태
+
+- `group/*`, `principal/*`, `authorization/*` 모든 리프 배포 완료

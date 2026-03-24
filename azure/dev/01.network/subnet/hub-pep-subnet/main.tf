@@ -18,7 +18,7 @@ data "terraform_remote_state" "hub_nsg" {
     resource_group_name  = var.backend_resource_group_name
     storage_account_name = var.backend_storage_account_name
     container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/network-security-group/hub-pep/terraform.tfstate"
+    key                  = "azure/dev/01.network/security-group/network-security-group/hub-pep/terraform.tfstate"
   }
 }
 
@@ -32,7 +32,7 @@ data "terraform_remote_state" "sg_hub_keyvault_clients_asg" {
     resource_group_name  = var.backend_resource_group_name
     storage_account_name = var.backend_storage_account_name
     container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/application-security-group/keyvault-clients/terraform.tfstate"
+    key                  = "azure/dev/01.network/security-group/application-security-group/keyvault-clients/terraform.tfstate"
   }
 }
 
@@ -42,7 +42,7 @@ data "terraform_remote_state" "sg_hub_vm_allowed_clients_asg" {
     resource_group_name  = var.backend_resource_group_name
     storage_account_name = var.backend_storage_account_name
     container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/application-security-group/vm-allowed-clients/terraform.tfstate"
+    key                  = "azure/dev/01.network/security-group/application-security-group/vm-allowed-clients/terraform.tfstate"
   }
 }
 

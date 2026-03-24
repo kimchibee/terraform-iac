@@ -11,3 +11,8 @@ VM·Managed Identity은 **VM 폴더 리프**에서만 `plan` / `apply` 합니다
 - 배포 순서 예: `01.network/vnet/hub-vnet` → `01.network/subnet/hub-pep-subnet`(ASG 사용 시) → `01.network/vnet/spoke-vnet` → `02.storage/monitoring` → `linux-monitoring-vm` → `08.rbac/principal/*`(필요 시) → `windows-example` 등.
 
 각 리프의 `README.md`·`terraform.tfvars.example`을 참고하세요.
+
+## 현재 상태
+
+- `06.compute/linux-monitoring-vm` 배포 완료
+- `06.compute/windows-example` 배포 완료

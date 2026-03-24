@@ -18,7 +18,7 @@ data "terraform_remote_state" "hub_nsg" {
     resource_group_name  = var.backend_resource_group_name
     storage_account_name = var.backend_storage_account_name
     container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/network-security-group/hub-monitoring-vm/terraform.tfstate"
+    key                  = "azure/dev/01.network/security-group/network-security-group/hub-monitoring-vm/terraform.tfstate"
   }
 }
 

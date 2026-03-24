@@ -11,15 +11,39 @@
 
 | 구분 | 요구 사항 |
 |------|-----------|
-| **Terraform** | **1.9 이상** (shared-services 스택의 AVM 기반 모듈 사용). [다운로드](https://www.terraform.io/downloads) |
+| **Terraform** | **1.9.x 이상(권장: 1.9~1.10)**. 팀 내 동일 버전 사용 권장. [다운로드](https://www.terraform.io/downloads) |
 | **Azure CLI** | 설치 후 `az login`으로 로그인. [설치 가이드](https://learn.microsoft.com/ko-kr/cli/azure/install-azure-cli) |
 | **Bash** | `scripts/generate-backend-hcl.sh` 실행용. Windows는 Git Bash 또는 WSL 권장. |
 | **OS** | Windows, macOS, Linux (Terraform·Azure CLI 지원 환경) |
 | **Azure 구독** | Hub 구독 1개, Spoke 구독 1개 (동일 구독으로 Hub/Spoke 구성 가능) |
-| **권한** | 각 구독에서 **Contributor** 또는 **Owner** |
+| **권한(구독)** | 각 구독에서 **Contributor 이상** + RBAC 생성 리프 실행 시 **User Access Administrator**(또는 Owner) |
+| **권한(Entra ID)** | `07.identity`/`08.rbac` 실행 시 그룹 멤버십 변경 권한(예: **Groups Administrator** 이상) |
 | **인증** | `az login` 또는 환경 변수: `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` |
 
 - **Backend 저장소**: Terraform State용 Azure Storage Account·Container는 **Bootstrap** 스택으로 최초 1회 생성합니다.
+
+### 1.1 신규 구독자 사전 체크리스트 (필수)
+
+새 구독 ID를 가진 사용자가 처음 배포할 때, 아래를 먼저 준비합니다.
+
+1. Azure 로그인/테넌트 확인
+   - `az login`
+   - `az account show --query "{name:name, id:id, tenantId:tenantId}" -o table`
+2. Hub/Spoke 구독 ID 확보
+   - `az account list --query "[].{name:name, id:id}" -o table`
+3. 배포 권한 확인
+   - Hub/Spoke 구독: `Contributor` 이상
+   - `08.rbac` 적용 계정: `User Access Administrator` 또는 `Owner`
+   - `07.identity`/`08.rbac`의 그룹 멤버십 변경: Entra ID 그룹 관리 권한
+4. Backend 계획값 확정
+   - `backend_resource_group_name`
+   - `backend_storage_account_name` (전역 유일, 소문자/숫자 3~24자)
+   - `backend_container_name` (기본 `tfstate`)
+5. 공통 환경값 확정
+   - `hub_subscription_id`, `spoke_subscription_id`
+   - `project_name`, `environment`, `location`
+
+> 권장: 위 값을 먼저 문서/메모에 확정한 뒤, 각 리프 `terraform.tfvars`에 동일하게 반영하세요.
 
 ---
 
@@ -191,6 +215,157 @@ terraform-iac/
 
 **한 구독으로만 테스트할 때**: Hub와 Spoke를 같은 구독에 두려면, `hub_subscription_id`와 `spoke_subscription_id`에 **같은 구독 ID**를 넣으면 됩니다. VNet만 구분되고 리소스는 한 구독에 모두 생성됩니다.
 
+### 3.0.2 신규 구독자용 복사/붙여넣기 배포 매뉴얼 (Bootstrap부터)
+
+아래 순서는 신규 구독 ID 사용자가 **현재 상태를 처음부터 재현**할 때 기준입니다.  
+핵심 원칙은 **Bootstrap -> backend.hcl 생성 -> 우선순위 리프 순차 적용**입니다.
+
+#### Step A. 공통 값 선언 (PowerShell)
+
+```powershell
+# 1) 본인 값으로 교체
+$HUB_SUBSCRIPTION_ID   = "<hub-subscription-id>"
+$SPOKE_SUBSCRIPTION_ID = "<spoke-subscription-id>"
+$BACKEND_RG            = "terraform-state-rg"
+$BACKEND_SA            = "tfstatexxxxxxxx"
+$BACKEND_CONTAINER     = "tfstate"
+$LOCATION              = "Korea Central"
+$PROJECT_NAME          = "test"
+$ENVIRONMENT           = "dev"
+```
+
+#### Step B. Bootstrap 배포 (최초 1회)
+
+```powershell
+Set-Location "<repo-root>/bootstrap/backend"
+Copy-Item "terraform.tfvars.example" "terraform.tfvars" -Force
+
+# terraform.tfvars에 아래 값 반영
+# - resource_group_name
+# - storage_account_name
+# - container_name
+# - location
+
+terraform init
+terraform plan -var-file terraform.tfvars
+terraform apply -var-file terraform.tfvars
+```
+
+#### Step C. backend.hcl 생성
+
+```bash
+# Git Bash/WSL
+cd "<repo-root>"
+./scripts/generate-backend-hcl.sh
+```
+
+PowerShell만 사용할 경우 각 리프에 아래 형식으로 수동 생성:
+
+```hcl
+resource_group_name  = "<BACKEND_RG>"
+storage_account_name = "<BACKEND_SA>"
+container_name       = "<BACKEND_CONTAINER>"
+key                  = "azure/dev/<leaf-path>/terraform.tfstate"
+```
+
+#### Step D. Provider 등록 (Hub/Spoke 각각 실행)
+
+```powershell
+$namespaces = @(
+  "Microsoft.OperationalInsights",
+  "Microsoft.Insights",
+  "Microsoft.OperationsManagement",
+  "Microsoft.ApiManagement",
+  "Microsoft.Network",
+  "Microsoft.Storage",
+  "Microsoft.KeyVault",
+  "Microsoft.Compute"
+)
+
+foreach ($sub in @($HUB_SUBSCRIPTION_ID, $SPOKE_SUBSCRIPTION_ID)) {
+  az account set --subscription $sub
+  foreach ($ns in $namespaces) { az provider register --namespace $ns | Out-Null }
+}
+```
+
+#### Step E. 우선순위 순서대로 리프 배포
+
+아래 순서가 현재 레포의 의존성 기준 우선순위입니다.
+
+1) `01.network`
+- `azure/dev/01.network/resource-group/hub-rg`
+- `azure/dev/01.network/security-group/application-security-group/keyvault-clients`
+- `azure/dev/01.network/security-group/application-security-group/vm-allowed-clients`
+- `azure/dev/01.network/security-group/network-security-group/keyvault-standalone`
+- `azure/dev/01.network/vnet/hub-vnet`
+- `azure/dev/01.network/subnet/hub-gateway-subnet`
+- `azure/dev/01.network/subnet/hub-dnsresolver-inbound-subnet`
+- `azure/dev/01.network/subnet/hub-azurefirewall-subnet`
+- `azure/dev/01.network/subnet/hub-azurefirewall-management-subnet`
+- `azure/dev/01.network/subnet/hub-appgateway-subnet`
+- `azure/dev/01.network/subnet/hub-monitoring-vm-subnet`
+- `azure/dev/01.network/subnet/hub-pep-subnet`
+- `azure/dev/01.network/resource-group/spoke-rg`
+- `azure/dev/01.network/vnet/spoke-vnet`
+- `azure/dev/01.network/subnet/spoke-apim-subnet`
+- `azure/dev/01.network/subnet/spoke-pep-subnet`
+- `azure/dev/01.network/route/hub-route-default`
+- `azure/dev/01.network/route/spoke-route-default`
+
+2) `02.storage`
+- `azure/dev/02.storage/monitoring`
+
+3) `03.shared-services`
+- `azure/dev/03.shared-services/log-analytics`
+- `azure/dev/03.shared-services/shared`
+
+4) `04.apim`
+- `azure/dev/04.apim/workload`
+
+5) `05.ai-services`
+- `azure/dev/05.ai-services/workload`
+
+6) `06.compute`
+- `azure/dev/06.compute/linux-monitoring-vm`
+- `azure/dev/06.compute/windows-example`
+
+7) `07.identity`
+- `azure/dev/07.identity/group-membership/admin-core`
+- `azure/dev/07.identity/group-membership/ai-developer-core`
+
+8) `08.rbac`
+- `azure/dev/08.rbac/group/admin-hub-scope`
+- `azure/dev/08.rbac/group/ai-developer-spoke-scope`
+- `azure/dev/08.rbac/principal/hub-assignments`
+- `azure/dev/08.rbac/principal/spoke-assignments`
+- `azure/dev/08.rbac/authorization/hub-assignments`
+- `azure/dev/08.rbac/authorization/spoke-assignments`
+
+9) `09.connectivity`
+- `azure/dev/09.connectivity/diagnostics/hub`
+- `azure/dev/09.connectivity/peering/hub-to-spoke`
+- `azure/dev/09.connectivity/peering/spoke-to-hub`
+
+각 리프 공통 명령 (복붙):
+
+```powershell
+Set-Location "<repo-root>/<leaf-path>"
+if ((Test-Path "terraform.tfvars.example") -and !(Test-Path "terraform.tfvars")) {
+  Copy-Item "terraform.tfvars.example" "terraform.tfvars"
+}
+
+# terraform.tfvars에 최소 반영:
+# - hub_subscription_id / spoke_subscription_id
+# - backend_resource_group_name / backend_storage_account_name / backend_container_name
+# - project_name / environment / location (해당 리프에서 사용 시)
+
+terraform init -backend-config backend.hcl
+terraform plan -var-file terraform.tfvars
+terraform apply -var-file terraform.tfvars
+```
+
+> 운영 팁: `03.shared-services/shared`, `04.apim/workload`, `05.ai-services/workload`는 생성 시간이 길 수 있으므로 중간 실패 시 [3.2.1](#321-실배포-기준-오류-대응) 패턴으로 즉시 복구 후 재실행하세요.
+
 ### 3.1 구독 Resource Provider 필수 등록
 
 배포 전에 아래 Provider를 구독에 등록합니다. 미등록 시 `MissingSubscriptionRegistration`(409) 오류가 발생할 수 있습니다.
@@ -218,10 +393,10 @@ az provider show --namespace Microsoft.OperationalInsights --query "registration
 | 순서 | 스택 | 디렉터리 | 배포 리소스명(예: project_name=test) | 비고 |
 |------|------|----------|--------------------------------------|------|
 | 0 | Bootstrap | `bootstrap/backend` | Resource Group, Storage Account, Storage Container (이름은 terraform.tfvars 기준) | Backend State용. **최초 1회.** `terraform init`만 사용(backend.hcl 없음). |
-| - | **backend.hcl 생성** | 프로젝트 루트 | — | Bootstrap **apply 완료 후** `./scripts/generate-backend-hcl.sh` 실행. |
+| - | **backend.hcl 생성** | 프로젝트 루트 | — | Bootstrap **apply 완료 후** Bash 환경에서 `./scripts/generate-backend-hcl.sh` 실행. (Windows PowerShell 단독 환경이면 [3.2.1](#321-실배포-기준-오류-대응)를 참고해 `backend.hcl`을 리프별로 동일 값으로 생성) |
 | 1a | network-rg-hub | `azure/dev/01.network/resource-group/hub-rg` | Hub Resource Group | 최우선 |
-| 1b | network-asg-hub | `azure/dev/01.network/application-security-group/keyvault-clients`, `.../vm-allowed-clients` | Hub ASG 리프 | hub-rg 이후 |
-| 1c | network-nsg-hub | `azure/dev/01.network/network-security-group/keyvault-standalone` | Hub standalone NSG | hub-rg 이후 |
+| 1b | network-asg-hub | `azure/dev/01.network/security-group/application-security-group/keyvault-clients`, `.../vm-allowed-clients` | Hub ASG 리프 | hub-rg 이후 |
+| 1c | network-nsg-hub | `azure/dev/01.network/security-group/network-security-group/keyvault-standalone` | Hub standalone NSG | hub-rg 이후 |
 | 1d | network-vnet-hub | `azure/dev/01.network/vnet/hub-vnet` | Hub VNet·VPN·DNS(모듈) | hub-rg 이후 |
 | 1e | network-subnet-hub-leaves | `azure/dev/01.network/subnet/hub-gateway-subnet`, `hub-dnsresolver-inbound-subnet`, `hub-azurefirewall-subnet`, `hub-azurefirewall-management-subnet`, `hub-appgateway-subnet`, `hub-monitoring-vm-subnet`, `hub-pep-subnet` | Hub 서브넷 리프 | hub-vnet 이후 |
 | 1f | network-rg-spoke | `azure/dev/01.network/resource-group/spoke-rg` | Spoke Resource Group | hub 이후 |
@@ -240,16 +415,58 @@ az provider show --namespace Microsoft.OperationalInsights --query "registration
 **각 스택 공통 절차:**
 
 ```bash
-cd azure/dev/01.network/vnet/hub-vnet   # 또는 `vnet/spoke-vnet`, 각 스택 리프 경로(`azure/dev/*/README.md`, `09.connectivity/README.md`)
+cd azure/dev/01.network/vnet/hub-vnet   # 또는 각 스택 리프 경로
 cp terraform.tfvars.example terraform.tfvars
 # terraform.tfvars 편집 (구독 ID, backend 관련 변수 등)
-terraform init -backend-config=backend.hcl
-terraform plan -var-file=terraform.tfvars
-terraform apply -var-file=terraform.tfvars
+terraform init -backend-config backend.hcl
+terraform plan -var-file terraform.tfvars
+terraform apply -var-file terraform.tfvars
+```
+
+```powershell
+Set-Location "azure/dev/01.network/vnet/hub-vnet"   # 또는 각 스택 리프 경로
+Copy-Item "terraform.tfvars.example" "terraform.tfvars"
+# terraform.tfvars 편집 (구독 ID, backend 관련 변수 등)
+terraform init -backend-config backend.hcl
+terraform plan -var-file terraform.tfvars
+terraform apply -var-file terraform.tfvars
 ```
 
 - **backend.hcl**은 `./scripts/generate-backend-hcl.sh` 실행으로 생성됩니다. 수동 작성 방법은 **Bootstrap 스택 README** (`bootstrap/backend/README.md`)를 참고하세요.
 - **삭제(롤백) 시**: **배포의 역순**이 안전합니다. **`09.connectivity` 각 리프** → `08.rbac`·`07.identity` 각 리프 → `06.compute` VM 리프 → … → `01.network/route/*` → `01.network/security-policy/*` → `01.network/subnet/spoke-*` → `01.network/vnet/spoke-vnet` → `01.network/resource-group/spoke-rg` → `01.network/subnet/hub-*` → `01.network/vnet/hub-vnet` → `01.network/network-security-group/*` → `01.network/application-security-group/*` → `01.network/resource-group/hub-rg`. 세부는 `01.network/README.md`, `08.rbac/README.md`, `09.connectivity/README.md` 참고.
+
+### 3.2.1 실배포 기준 오류 대응
+
+실제 배포(`network -> connectivity`)에서 반복 확인된 오류와 대응 절차입니다.
+
+| 오류 증상 | 대표 메시지 | 대응 방법 |
+|------|------|------|
+| 리소스는 Azure에 이미 있는데 state가 비어 있음 | `A resource with the ID ... already exists - ... import into the State` | 해당 리프에서 `terraform import <address> <resource_id>`로 state 복구 후 재실행 |
+| Terraform 옵션 파싱 오류 | `Too many command line arguments` | `-backend-config=backend.hcl`, `-var-file=terraform.tfvars` 대신 **공백 구문** 사용 (`-backend-config backend.hcl`, `-var-file terraform.tfvars`) |
+| PowerShell에서 bash 스크립트 미실행 | `'bash' is not recognized` | Git Bash/WSL에서 `./scripts/generate-backend-hcl.sh` 실행 또는 리프별 `backend.hcl` 수동 생성 |
+| 선행 state/output 부재 | `outputs is object with no attributes`, `Unsupported attribute` | 선행 리프가 apply되어 state output이 생성됐는지 확인 후 순서 재실행 |
+| provider 버전 충돌 | `no available releases match the given constraints ~> 3.75.0, ~> 4.0` | 리프와 참조 모듈의 `required_providers` 제약을 단일 메이저로 정렬(예: `~> 4.0`) 후 `terraform init -upgrade` |
+
+#### 수동 backend.hcl 템플릿 (PowerShell 단독 환경용)
+
+각 리프 디렉터리의 `backend.hcl`을 아래 형식으로 동일하게 맞춥니다. (`key`만 리프 경로에 맞게 변경)
+
+```hcl
+resource_group_name  = "terraform-state-rg"
+storage_account_name = "tfstate7dc60879"
+container_name       = "tfstate"
+key                  = "azure/dev/<leaf-path>/terraform.tfstate"
+```
+
+#### 동일 이슈 재발 시 공통 적용 규칙 (다른 스택 포함)
+
+`01.network`에서 검증된 아래 순서를 `02~09` 스택에도 동일하게 적용합니다.
+
+1. provider 충돌 발생 시: 리프/래퍼/AVM 제약 교집합을 확인해 한 메이저로 정렬 후 `terraform init -upgrade`
+2. `backend.hcl` 누락 시: 위 템플릿으로 생성하고 `key`만 리프 경로에 맞게 변경
+3. `resource already exists` 발생 시: `terraform import <address> <resource_id>` 후 `plan/apply` 재실행
+4. `Unsupported attribute`/`outputs is object with no attributes` 발생 시: 선행 의존 리프 먼저 적용 후 하위 리프 재실행
+5. 리프별 기본 점검 순서: `resource-group -> vnet -> nsg -> subnet -> route -> security-policy`
 
 ### 3.3 AI 모델 지정 방법 가이드 (ai-services 스택)
 

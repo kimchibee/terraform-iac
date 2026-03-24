@@ -83,3 +83,15 @@ variable "openai_deployments" {
   }))
   default = []
 }
+
+variable "enable_ai_foundry_workspace" {
+  description = "Enable AI Foundry (Azure ML workspace) provisioning"
+  type        = bool
+  default     = true
+}
+
+variable "enable_private_endpoints" {
+  description = "Enable Private Endpoint provisioning for OpenAI and AI Foundry"
+  type        = bool
+  default     = true
+}

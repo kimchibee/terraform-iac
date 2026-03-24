@@ -38,9 +38,9 @@
 | 리소스 종류 | 리프 | State 키 |
 |------|------|-----------|
 | Resource Group | `01.network/resource-group/hub-rg` | `azure/dev/01.network/resource-group/hub-rg/terraform.tfstate` |
-| Application Security Group | `01.network/application-security-group/keyvault-clients` | `azure/dev/01.network/application-security-group/keyvault-clients/terraform.tfstate` |
-| Application Security Group | `01.network/application-security-group/vm-allowed-clients` | `azure/dev/01.network/application-security-group/vm-allowed-clients/terraform.tfstate` |
-| Network Security Group | `01.network/network-security-group/keyvault-standalone` | `azure/dev/01.network/network-security-group/keyvault-standalone/terraform.tfstate` |
+| Application Security Group | `01.network/application-security-group/keyvault-clients` | `azure/dev/01.network/security-group/application-security-group/keyvault-clients/terraform.tfstate` |
+| Application Security Group | `01.network/application-security-group/vm-allowed-clients` | `azure/dev/01.network/security-group/application-security-group/vm-allowed-clients/terraform.tfstate` |
+| Network Security Group | `01.network/network-security-group/keyvault-standalone` | `azure/dev/01.network/security-group/network-security-group/keyvault-standalone/terraform.tfstate` |
 | VNet | `01.network/vnet/hub-vnet` | `azure/dev/01.network/vnet/hub-vnet/terraform.tfstate` |
 | Subnet | `01.network/subnet/hub-gateway-subnet` | `azure/dev/01.network/subnet/hub-gateway-subnet/terraform.tfstate` |
 | Subnet | `01.network/subnet/hub-dnsresolver-inbound-subnet` | `azure/dev/01.network/subnet/hub-dnsresolver-inbound-subnet/terraform.tfstate` |
@@ -49,13 +49,13 @@
 | Subnet | `01.network/subnet/hub-appgateway-subnet` | `azure/dev/01.network/subnet/hub-appgateway-subnet/terraform.tfstate` |
 | Subnet | `01.network/subnet/hub-monitoring-vm-subnet` | `azure/dev/01.network/subnet/hub-monitoring-vm-subnet/terraform.tfstate` |
 | Subnet | `01.network/subnet/hub-pep-subnet` | `azure/dev/01.network/subnet/hub-pep-subnet/terraform.tfstate` |
-| Security Policy | `01.network/security-policy/hub-sg-policy-default` | `azure/dev/01.network/security-policy/hub-sg-policy-default/terraform.tfstate` |
+| Security Policy | `01.network/security-policy/hub-sg-policy-default` | `azure/dev/01.network/security-group/security-policy/hub-sg-policy-default/terraform.tfstate` |
 | Route | `01.network/route/hub-route-default` | `azure/dev/01.network/route/hub-route-default/terraform.tfstate` |
 | Resource Group | `01.network/resource-group/spoke-rg` | `azure/dev/01.network/resource-group/spoke-rg/terraform.tfstate` |
 | VNet | `01.network/vnet/spoke-vnet` | `azure/dev/01.network/vnet/spoke-vnet/terraform.tfstate` |
 | Subnet | `01.network/subnet/spoke-apim-subnet` | `azure/dev/01.network/subnet/spoke-apim-subnet/terraform.tfstate` |
 | Subnet | `01.network/subnet/spoke-pep-subnet` | `azure/dev/01.network/subnet/spoke-pep-subnet/terraform.tfstate` |
-| Security Policy | `01.network/security-policy/spoke-sg-policy-default` | `azure/dev/01.network/security-policy/spoke-sg-policy-default/terraform.tfstate` |
+| Security Policy | `01.network/security-policy/spoke-sg-policy-default` | `azure/dev/01.network/security-group/security-policy/spoke-sg-policy-default/terraform.tfstate` |
 | Route | `01.network/route/spoke-route-default` | `azure/dev/01.network/route/spoke-route-default/terraform.tfstate` |
 
 ## 참고
@@ -85,3 +85,8 @@ Strict AVM-only 파동에서 `01.network`는 아래 리프만 in-scope로 본다
 - `virtual-network-gateway/*`
 - `network-security-rule/*`
 - `subnet-network-security-group-association/*`
+
+## 현재 상태
+
+- `01.network` 리프 배포 완료
+- Hub/Spoke VNet 및 주요 Subnet, DNS Resolver, NSG/ASG 리소스 운영 중

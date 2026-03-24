@@ -43,24 +43,14 @@ data "terraform_remote_state" "hub_pep_subnet" {
   }
 }
 
-data "terraform_remote_state" "hub_blob_zone" {
-  backend = "azurerm"
-  config = {
-    resource_group_name  = var.backend_resource_group_name
-    storage_account_name = var.backend_storage_account_name
-    container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/private-dns-zone/hub-blob/terraform.tfstate"
-  }
+data "azurerm_private_dns_zone" "hub_blob_zone" {
+  name                = "privatelink.blob.core.windows.net"
+  resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
 }
 
-data "terraform_remote_state" "hub_vault_zone" {
-  backend = "azurerm"
-  config = {
-    resource_group_name  = var.backend_resource_group_name
-    storage_account_name = var.backend_storage_account_name
-    container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/private-dns-zone/hub-vault/terraform.tfstate"
-  }
+data "azurerm_private_dns_zone" "hub_vault_zone" {
+  name                = "privatelink.vaultcore.azure.net"
+  resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
 }
 
 data "terraform_remote_state" "compute" {
@@ -103,7 +93,7 @@ module "monitoring_storage_blob_private_endpoint" {
   subnet_id            = data.terraform_remote_state.hub_pep_subnet.outputs.hub_subnet_id
   target_resource_id   = each.value.storage_account_id
   subresource_names    = ["blob"]
-  private_dns_zone_ids = [data.terraform_remote_state.hub_blob_zone.outputs.private_dns_zone_id]
+  private_dns_zone_ids = [data.azurerm_private_dns_zone.hub_blob_zone.id]
   tags                 = var.tags
 }
 
@@ -142,7 +132,7 @@ module "key_vault_private_endpoint" {
   subnet_id            = data.terraform_remote_state.hub_pep_subnet.outputs.hub_subnet_id
   target_resource_id   = module.key_vault[0].id
   subresource_names    = ["vault"]
-  private_dns_zone_ids = [data.terraform_remote_state.hub_vault_zone.outputs.private_dns_zone_id]
+  private_dns_zone_ids = [data.azurerm_private_dns_zone.hub_vault_zone.id]
   tags                 = var.tags
 }
 

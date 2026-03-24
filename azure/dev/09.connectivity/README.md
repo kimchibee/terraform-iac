@@ -58,3 +58,8 @@ terraform apply -var-file=terraform.tfvars
 - **`diagnostics/hub`**: `project_name`, `hub_subscription_id`, `backend_*`  
 
 단일 스택에 쓰던 `terraform.tfvars`를 그대로 쓸 수 없습니다. 리프별 예시는 각 폴더의 `terraform.tfvars.example`를 참고합니다.
+
+## 현재 상태
+
+- `peering/hub-to-spoke`, `peering/spoke-to-hub` 모두 Connected
+- `diagnostics/hub` 리프 배포 완료

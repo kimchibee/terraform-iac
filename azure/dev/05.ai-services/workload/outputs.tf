@@ -13,21 +13,31 @@ output "openai_endpoint" {
 }
 
 output "ai_foundry_id" {
-  description = "Deferred output (AI Foundry workspace not provisioned in wave1)"
-  value       = null
+  description = "Azure Machine Learning workspace (AI Foundry) ID"
+  value       = try(azurerm_machine_learning_workspace.ai_foundry[0].id, null)
 }
 
 output "ai_foundry_discovery_url" {
-  description = "Deferred output (AI Foundry workspace not provisioned in wave1)"
-  value       = null
+  description = "AI Foundry discovery URL"
+  value       = try(azurerm_machine_learning_workspace.ai_foundry[0].discovery_url, null)
 }
 
 output "key_vault_id" {
-  description = "Deferred output (AI Foundry workspace not provisioned in wave1)"
-  value       = null
+  description = "AI Foundry dependency Key Vault ID"
+  value       = azurerm_key_vault.ai_foundry.id
 }
 
 output "storage_account_id" {
-  description = "Deferred output (AI Foundry workspace not provisioned in wave1)"
-  value       = null
+  description = "AI Foundry dependency Storage Account ID"
+  value       = azurerm_storage_account.ai_foundry.id
+}
+
+output "openai_private_endpoint_id" {
+  description = "OpenAI Private Endpoint ID in spoke"
+  value       = try(module.openai_private_endpoint[0].id, null)
+}
+
+output "ai_foundry_private_endpoint_id" {
+  description = "AI Foundry Private Endpoint ID in spoke"
+  value       = try(module.ai_foundry_private_endpoint[0].id, null)
 }

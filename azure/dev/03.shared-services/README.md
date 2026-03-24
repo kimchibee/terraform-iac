@@ -15,3 +15,8 @@ Shared services는 **리프 2개**로 나뉘며, 적용 순서는 `log-analytics
 - `shared`는 `terraform_modules/shared-services`가 non-AVM composite이므로 strict AVM Foundation에서는 Deferred입니다.
 
 다른 스택(APIM, AI 등)은 **`shared` 리프 state만 참조**하면 Log Analytics와 shared 출력값을 함께 사용할 수 있습니다.
+
+## 현재 상태
+
+- `03.shared-services/log-analytics` 배포 완료
+- `03.shared-services/shared` 배포 완료

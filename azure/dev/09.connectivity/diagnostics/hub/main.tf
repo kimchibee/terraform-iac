@@ -25,7 +25,7 @@ data "terraform_remote_state" "hub_monitoring_nsg" {
     resource_group_name  = var.backend_resource_group_name
     storage_account_name = var.backend_storage_account_name
     container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/network-security-group/hub-monitoring-vm/terraform.tfstate"
+    key                  = "azure/dev/01.network/security-group/network-security-group/hub-monitoring-vm/terraform.tfstate"
   }
 }
 
@@ -35,7 +35,7 @@ data "terraform_remote_state" "hub_pep_nsg" {
     resource_group_name  = var.backend_resource_group_name
     storage_account_name = var.backend_storage_account_name
     container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/network-security-group/hub-pep/terraform.tfstate"
+    key                  = "azure/dev/01.network/security-group/network-security-group/hub-pep/terraform.tfstate"
   }
 }
 
@@ -49,12 +49,17 @@ data "terraform_remote_state" "storage" {
   }
 }
 
+locals {
+  diag_storage_account_id = try(data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["acrlog"], null)
+  hub_vpn_gateway_id      = try(data.terraform_remote_state.hub_vpn_gateway.outputs.virtual_network_gateway_id, null)
+}
+
 resource "azurerm_monitor_diagnostic_setting" "hub_vpn_gateway" {
-  count = length(data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids) > 0 ? 1 : 0
+  count = local.diag_storage_account_id != null && local.hub_vpn_gateway_id != null ? 1 : 0
 
   name               = "${data.terraform_remote_state.network.outputs.hub_vnet_name}-vpng-storage-diag"
-  target_resource_id = data.terraform_remote_state.hub_vpn_gateway.outputs.virtual_network_gateway_id
-  storage_account_id = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["vpnglog"]
+  target_resource_id = local.hub_vpn_gateway_id
+  storage_account_id = local.diag_storage_account_id
 
   enabled_log {
     category = "GatewayDiagnosticLog"
@@ -83,11 +88,11 @@ resource "azurerm_monitor_diagnostic_setting" "hub_vpn_gateway" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "hub_vnet" {
-  count = length(data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids) > 0 ? 1 : 0
+  count = local.diag_storage_account_id != null ? 1 : 0
 
   name               = "${data.terraform_remote_state.network.outputs.hub_vnet_name}-storage-diag"
   target_resource_id = data.terraform_remote_state.network.outputs.hub_vnet_id
-  storage_account_id = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["vnetlog"]
+  storage_account_id = local.diag_storage_account_id
 
   metric {
     category = "AllMetrics"
@@ -96,11 +101,11 @@ resource "azurerm_monitor_diagnostic_setting" "hub_vnet" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "hub_nsg_monitoring" {
-  count = length(data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids) > 0 ? 1 : 0
+  count = local.diag_storage_account_id != null ? 1 : 0
 
   name               = "${var.project_name}-nsg-monitoring-diag"
   target_resource_id = data.terraform_remote_state.hub_monitoring_nsg.outputs.network_security_group_id
-  storage_account_id = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["nsglog"]
+  storage_account_id = local.diag_storage_account_id
 
   enabled_log {
     category = "NetworkSecurityGroupEvent"
@@ -112,11 +117,11 @@ resource "azurerm_monitor_diagnostic_setting" "hub_nsg_monitoring" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "hub_nsg_pep" {
-  count = length(data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids) > 0 ? 1 : 0
+  count = local.diag_storage_account_id != null ? 1 : 0
 
   name               = "${var.project_name}-nsg-pep-diag"
   target_resource_id = data.terraform_remote_state.hub_pep_nsg.outputs.network_security_group_id
-  storage_account_id = data.terraform_remote_state.storage.outputs.monitoring_storage_account_ids["nsglog"]
+  storage_account_id = local.diag_storage_account_id
 
   enabled_log {
     category = "NetworkSecurityGroupEvent"

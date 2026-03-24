@@ -49,7 +49,7 @@ variable "rg_suffix" {
 }
 
 variable "vnet_suffix" {
-  description = "VNet ?�름 ?��???
+  description = "VNet name suffix (final name: name_prefix-vnet_suffix)"
   type        = string
   default     = "spoke-vnet"
 }

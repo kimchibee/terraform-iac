@@ -33,6 +33,9 @@ backend_container_name       = "tfstate"
 # ---------------------------------------------------------------------------
 openai_sku = "S0"
 openai_deployments = []
+# AI Foundry/Private Endpoint (default true)
+enable_ai_foundry_workspace = true
+enable_private_endpoints    = true
 # 승인 후 재시도 시 아래 중 하나 주석 해제 후 사용. 나중에 수정 필요.
 # openai_deployments = [
 #   { name = "gpt-4o",       model_name = "gpt-4o",       version = "2024-05-13", capacity = 30 }

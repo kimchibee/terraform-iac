@@ -29,7 +29,7 @@ variable "backend_container_name" {
 }
 
 variable "enable_monitoring_vm_roles" {
-  description = "compute ?�택 Monitoring VM MI????�� 부??
+  description = "Enable RBAC role assignments for monitoring VM managed identity"
   type        = bool
   default     = true
 }

@@ -15,3 +15,8 @@
 
 배포 순서는 **`07.identity` → `08.rbac`** 입니다. (멤버십을 먼저 맞춘 뒤 그룹 스코프 역할을 부여하는 흐름에 맞춤.)  
 멤버십만 바꿀 때는 identity 리프만 plan/apply 하면 되고, `08.rbac`와는 독립적으로 실행할 수 있습니다.
+
+## 현재 상태
+
+- `group-membership/admin-core` 배포 완료
+- `group-membership/ai-developer-core` 배포 완료
