@@ -1,72 +1,122 @@
-# 아키텍처 기준 Terraform 동기화 시나리오 가이드
+# 아키텍처 기준 Terraform 동기화 가이드
 
-이 문서는 Azure에 이미 리소스가 배포되어 있고, 현재 리포지토리의 Terraform 코드와 **동기화(import/상태 정리)** 해야 하는 상황을 가정한 운영 가이드입니다.
+이 문서는 이미 콘솔(수동)로 운영 중인 Azure 시스템을 현재 Terraform 코드와 일치시키고,
+이후 신규 리소스는 Terraform으로만 배포하도록 전환하는 실행 가이드입니다.
 
-전제:
+핵심 목적:
 
-- 대상 아키텍처는 Hub/Spoke 구조이며, 네트워크/스토리지/APIM/AI/컴퓨트/권한/연결 스택이 모두 존재
-- 배포된 리소스가 코드보다 먼저 존재할 수 있음
-- 목표는 `terraform apply` 시 불필요한 재생성 없이, 코드와 실제 리소스 상태를 일치시키는 것
-
----
-
-## 1) 사전 점검 (반드시 먼저)
-
-1. 구독/테넌트 확인
-   - `az login`
-   - `az account show -o table`
-2. backend 저장소 확인
-   - `bootstrap/backend/terraform.tfvars` 값과 실제 Storage Account/Container 일치 확인
-3. Provider 등록 확인
-   - 최소: `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.KeyVault`, `Microsoft.Insights`, `Microsoft.OperationalInsights`, `Microsoft.ApiManagement`, `Microsoft.CognitiveServices`, `Microsoft.MachineLearningServices`
-4. 리프별 `backend.hcl` 생성
-   - 루트에서 `scripts/generate-backend-hcl.sh` 실행 또는 수동 생성
-5. 리소스 네이밍 룰 확정
-   - `project_name`, `environment`, 접두/접미 규칙을 먼저 잠금
+- import 자체가 목적이 아니라, 운영 실환경과 코드 정합화가 목적
+- 정합화 완료 후 신규/변경은 Terraform-only로 운영
 
 ---
 
-## 2) 네이밍 룰 불일치 정리 전략
+## 1) 적용 범위와 원칙
 
-이미 배포된 리소스 이름이 코드 규칙과 다를 때는 아래 순서로 판단합니다.
-
-1. **서비스 영향 큰 리소스** (VNet, APIM, OpenAI, ML Workspace, Key Vault, Storage)
-   - 가급적 이름 변경하지 않고 Terraform 코드(변수/locals)를 실제 이름에 맞춰 동기화
-2. **재생성 허용 리소스** (일부 진단 설정, 보조 구성)
-   - 네이밍 룰 우선으로 코드 정리 후 재생성 허용 가능
-3. **전역 유니크 이름 리소스** (Storage, Key Vault)
-   - suffix 전략 사용(예: `random_string`)으로 충돌/soft-delete 이슈 회피
-
-권장 원칙:
-
-- 운영 리소스는 이름 유지 + state import
-- 신규 생성 리소스만 표준 네이밍 적용
+- 대상: Hub/Spoke 아키텍처의 `01.network` ~ `09.connectivity` 전체 스택
+- 원칙 1: 운영 핵심 리소스(VNet, APIM, OpenAI, ML Workspace, Key Vault, Storage)는 이름 유지 우선
+- 원칙 2: 코드/변수/출력 구조를 실환경에 먼저 맞춘 뒤 state 동기화
+- 원칙 3: 전환 완료 후 콘솔 수동 변경 금지
 
 ---
 
-## 3) 리프별 상태 파일 생성/동기화 절차
+## 2) Phase A - 현재 배포 리소스 전체 인벤토리 수집
 
-아래를 각 리프 디렉토리에서 반복합니다.
+목표: Azure에 실제로 배포된 리소스를 먼저 확정합니다.
 
-1. 초기화
-   - `terraform init -backend-config=backend.hcl`
-2. 드리프트/충돌 확인
-   - `terraform plan -var-file=terraform.tfvars`
-3. 이미 존재 리소스가 있으면 import
-   - 오류 메시지의 리소스 주소와 Azure Resource ID를 사용해 `terraform import`
-4. 재검증
-   - `terraform plan -var-file=terraform.tfvars`
-5. 변경 승인
-   - `terraform apply -var-file=terraform.tfvars`
+### A-1. 구독 컨텍스트 확인
 
-핵심:
+```bash
+az login
+az account list --query "[].{name:name,id:id,tenant:tenantId}" -o table
+```
 
-- `Resource already exists`는 삭제가 아니라 **import로 해결**
-- import 이후 plan이 0~최소 변경인지 확인
+### A-2. 구독별 리소스 전체 수집 (Hub / Spoke)
+
+```bash
+az account set --subscription "<HUB_SUBSCRIPTION_ID>"
+az resource list -o json > hub_resources.json
+
+az account set --subscription "<SPOKE_SUBSCRIPTION_ID>"
+az resource list -o json > spoke_resources.json
+```
+
+### A-3. 타입별 집계 (선택)
+
+```bash
+az graph query -q "Resources | summarize count() by type | order by type asc"
+```
 
 ---
 
-## 4) 현재 아키텍처 기준 권장 동기화 순서
+## 3) Phase B - 코드와 실환경 비교, 수정 항목 리스트업
+
+목표: import 전에 코드가 실환경을 표현하도록 맞춥니다.
+
+### B-1. 비교 기준
+
+- 이름 규칙(`project_name`, 접두/접미, 리소스명)
+- SKU/성능/보안 설정
+- 네트워크 구조(서브넷, PE, NSG/ASG, route)
+- remote state output key 정합
+- enable 플래그/조건(`count`, `for_each`)
+
+### B-2. 수정 항목 리스트(필수 산출물)
+
+| 스택/리프 | 실환경 값 | 현재 코드 값 | 조치 |
+|---|---|---|---|
+| `05.ai-services/workload` | ML Workspace 이름 A | 코드 이름 B | 변수/locals 수정 |
+| `08.rbac/group/*` | 그룹 Object ID 존재 | tfvars 비어 있음 | tfvars 운영값 반영 |
+
+### B-3. 코드 수정 우선순위
+
+1. `variables.tf`, `terraform.tfvars`
+2. `main.tf` (조건식, 모듈 인자, 참조 경로)
+3. `outputs.tf`
+4. README/운영 문서
+
+---
+
+## 4) Phase C - 상태(state) 동기화
+
+목표: 코드와 실환경이 맞는 상태에서 state를 구성합니다.
+
+### C-1. 리프별 기본 절차
+
+```bash
+terraform init -backend-config=backend.hcl
+terraform plan -var-file=terraform.tfvars
+```
+
+- `already exists`가 발생하면 해당 리소스는 `terraform import`로 state 편입
+- 단, import 전에 코드/변수가 실환경과 일치하는지 먼저 확인
+
+### C-2. import 적용 기준
+
+- 적용: 실환경에서 유지할 리소스
+- 제외: Terraform 관리 대상이 아닌 리소스
+
+---
+
+## 5) Phase D - 스택별 싱크 판정 (init/plan 출력 기준)
+
+요청 기준대로 각 리프 `init + plan` 출력으로 싱크를 판정합니다.
+
+### 판정 규칙
+
+- `SYNC`: `No changes` 또는 의도한 소량 변경만 존재
+- `PARTIAL`: 일부 리프 drift 존재
+- `NOT SYNC`: 대량 create/destroy/replace 또는 참조 오류
+
+### 출력 기반 체크 포인트
+
+- `Unsupported attribute` 없음
+- `Resource already exists` 없음
+- 운영 핵심 리소스에서 대규모 `replace` 없음
+- RBAC/Identity `count=0`가 의도값인지 확인
+
+---
+
+## 6) 권장 실행 순서 (의존성 기준)
 
 1. `01.network`
 2. `02.storage`
@@ -78,65 +128,88 @@
 8. `08.rbac`
 9. `09.connectivity`
 
-이유:
+---
 
-- 상위 네트워크/스토리지 상태를 하위 스택이 remote state로 참조함
-- 순서를 어기면 output 누락/Unsupported attribute가 발생하기 쉬움
+## 7) 동기화 완료 정의
+
+아래를 모두 만족하면 동기화 완료로 판단합니다.
+
+- 모든 리프 `terraform init` 성공
+- 모든 리프 `terraform plan`이 `SYNC`
+- 핵심 리소스(VNet/Storage/APIM/OpenAI/ML/VM/Peering) 코드-실환경 일치
+- RBAC/Identity 운영값 반영 완료
+- 이후 신규 생성은 Terraform 경로로만 수행
 
 ---
 
-## 5) 자주 발생하는 동기화 이슈와 대응
+## 8) Terraform-only 운영 전환 규칙
 
-1. `MissingSubscriptionRegistration`
-   - 원인: 구독 Provider 미등록
-   - 대응: `az provider register --namespace <RP>`
-2. `Resource already exists`
-   - 원인: 리소스 선배포, state 미등록
-   - 대응: `terraform import`
-3. `Soft-deleted resource exists` (ML Workspace/Key Vault 등)
-   - 원인: 동일 이름 soft-delete 잔존
-   - 대응: purge 또는 suffix 기반 이름 재설계
-4. `Unsupported attribute` (remote state output 키 불일치)
-   - 원인: 참조 경로/출력명 변경
-   - 대응: upstream leaf output 정합성 확인 후 참조 코드 수정
+- 신규 리소스: Terraform 코드 변경 -> plan -> apply
+- 콘솔 수동 변경 금지 (예외 시 즉시 코드/state 반영)
+- 정기적으로 리프별 `plan` 실행해 drift 점검
 
 ---
 
-## 6) 신규 리소스 추가 / 스펙 변경 시 체크리스트
+## 9) AI 작업 지시 프롬프트 템플릿
 
-### A. 신규 리소스 추가
+아래 템플릿을 AI에게 그대로 전달하면 동기화 작업을 안정적으로 수행할 수 있습니다.
 
-1. 해당 리프의 `variables.tf`에 입력 변수 추가
-2. `terraform.tfvars`/`terraform.tfvars.example`에 운영값/예시 추가
-3. `main.tf`에 리소스 또는 모듈 블록 추가
-4. `outputs.tf`에 후속 스택 참조용 출력 추가
-5. `README.md`에 변경 포인트 기록
-6. `plan -> apply` 후 downstream 리프 plan 재확인
+### 9-1. 전체 동기화 시작 프롬프트
 
-### B. 네임/스펙 변경
+```text
+목표:
+이미 콘솔로 운영 중인 Azure Hub/Spoke 환경을 현재 terraform-iac 코드와 먼저 일치시키고,
+동기화 완료 후 신규 리소스는 Terraform으로만 배포하도록 전환한다.
 
-1. 변경 대상이 ForceNew인지 먼저 확인(plan에서 replace 여부 확인)
-2. 운영 영향이 큰 리소스는 가능한 한 이름 고정, 스펙만 조정
-3. replace가 불가피하면 점검 시간대/롤백 경로 먼저 확정
-4. 적용 후 `09.connectivity`와 진단 설정까지 재검증
+작업 순서:
+1) Hub/Spoke 구독 전체 리소스를 az 명령으로 수집해 인벤토리 작성
+2) 각 스택(01~09) 코드와 실환경 비교 후 수정 항목 리스트 작성
+3) 코드(variables/tfvars/main/outputs) 정합화 먼저 수행
+4) 필요한 리소스만 terraform import로 state 편입
+5) 각 리프에서 init/plan 실행 후 SYNC/PARTIAL/NOT SYNC 판정표 작성
 
----
+제약:
+- terraform-modules 레포 코드는 수정 금지(필요 시 사전 승인)
+- 운영 핵심 리소스는 이름 유지 우선, 불필요한 replace 금지
+- 변경 이유와 영향도를 각 수정 항목에 명시
 
-## 7) 검증 기준 (동기화 완료 정의)
+결과물:
+- 스택별 수정 항목 리스트
+- 반영된 코드 변경
+- 리프별 plan 결과와 최종 싱크 판정표
+```
 
-아래를 만족하면 동기화 완료로 판단합니다.
+### 9-2. 스택 단위 실행 프롬프트
 
-- 각 리프 `terraform plan` 결과가 무변경 또는 의도한 변경만 포함
-- NSG/ASG/Subnet Association이 아키텍처 의도와 일치
-- Hub/Spoke Peering이 양방향 `Connected`
-- AI/APIM/Storage/Key Vault의 Private Endpoint가 기대 개수대로 존재
-- 주요 출력값(remote state 소비 값)이 후속 스택 plan에서 정상 해석됨
+```text
+대상 스택: 08.rbac
 
----
+요청:
+1) 현재 Azure 실환경과 08.rbac 코드/tfvars를 비교
+2) count/for_each 조건으로 인해 미배포되는 리소스가 있는지 확인
+3) 필요한 tfvars 운영값(Object ID, scope, iam_role_assignments) 제안
+4) init/plan 결과 기준으로 싱크 여부를 판정
 
-## 8) 운영 권장사항
+출력 형식:
+- 원인 요약(왜 미배포인지)
+- 수정 파일 목록
+- 변경 전/후 기대 plan 결과
+```
 
-- 리소스 수동 생성보다 Terraform 경유 생성 우선
-- 예외적으로 수동 생성 시 즉시 import하여 state 동기화
-- 리프 단위로 작게 plan/apply하고, 대규모 일괄 변경은 지양
-- 커밋 메시지는 "왜 이 동기화가 필요했는지" 중심으로 기록
+### 9-3. 검증 전용 프롬프트
+
+```text
+코드 수정은 하지 말고 검증만 수행:
+1) 각 리프 terraform init/plan 실행
+2) 결과를 SYNC/PARTIAL/NOT SYNC로 분류
+3) NOT SYNC 항목은 원인(변수 누락, output mismatch, import 필요 등)과 해결 단계 제시
+```
+
+### 9-4. 안전장치 문구(프롬프트에 항상 포함 권장)
+
+```text
+중요:
+- destructive 명령은 사전 승인 없이 실행하지 않는다.
+- 예기치 않은 파일 변경이 감지되면 즉시 중단하고 보고한다.
+- 변경은 항상 스택 의존성 순서(01->09) 기준으로 수행한다.
+```
