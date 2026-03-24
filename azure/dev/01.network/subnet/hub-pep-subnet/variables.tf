@@ -11,7 +11,7 @@ variable "location" {
 }
 
 variable "tags" {
-  type = map(string)
+  type    = map(string)
   default = {}
 }
 
@@ -37,32 +37,32 @@ variable "backend_container_name" {
 }
 
 variable "use_securitygroup_prereq" {
-  description = "true�?01.network ??application-security-group / network-security-group 리프 state?�서 ID�??�어 규칙·?�결�??�용"
+  description = "Use security group and ASG remote-state prerequisites when true."
   type        = bool
   default     = false
 }
 
 # ?�나리오 3: keyvault-sg
 variable "enable_keyvault_sg" {
-  description = "Enable keyvault-sg: NSG 규칙?�로 Key Vault(443) ?�웃바운???�용"
+  description = "Enable key-vault outbound NSG policy integration."
   type        = bool
   default     = false
 }
 
 variable "hub_subnet_names_attach_keyvault_sg" {
-  description = "Hub ?�브???�름 목록: standalone keyvault-sg NSG�??�결???�브??
+  description = "Hub subnet names to associate with key vault standalone NSG."
   type        = list(string)
   default     = []
 }
 
 variable "hub_nsg_keys_add_keyvault_rule" {
-  description = "Key Vault ?�웃바운??규칙??추�???Hub NSG ?? monitoring_vm, pep"
+  description = "Hub NSG keys where key vault outbound rules are injected."
   type        = list(string)
   default     = []
 }
 
 variable "enable_pe_inbound_from_asg" {
-  description = "PE(pep-snet) NSG???�바?�드: ?�스=keyvault-clients ASG, ?�트 443"
+  description = "Enable inbound 443 PE rule from keyvault-clients ASG."
   type        = bool
   default     = false
 }

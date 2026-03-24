@@ -3,7 +3,7 @@ variable "project_name" {
 }
 
 variable "tags" {
-  type = map(string)
+  type    = map(string)
   default = {}
 }
 
@@ -25,25 +25,25 @@ variable "backend_container_name" {
 }
 
 variable "deploy_azure_firewall" {
-  description = "false�?Firewall Policy�??�성. true�?vnet/spoke-vnet state??firewall_subnet_key ?�브?�이 ?�어????
+  description = "When true, creates Azure Firewall policy resources."
   type        = bool
   default     = false
 }
 
 variable "firewall_subnet_id" {
-  description = "deploy_azure_firewall=true ?????�용??Azure Firewall subnet ID"
+  description = "Firewall subnet ID used when deploy_azure_firewall is true."
   type        = string
   default     = null
 }
 
 variable "firewall_sku_tier" {
-  description = "Azure Firewall SKU tier (Policy sku?� 맞출 �?"
+  description = "Azure Firewall SKU tier."
   type        = string
   default     = "Standard"
 }
 
 variable "firewall_zones" {
-  description = "가???�역 (리전???�라 null)"
+  description = "Availability zones for firewall resources."
   type        = list(string)
   default     = null
 }
