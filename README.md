@@ -54,12 +54,12 @@
 | 저장소 | 역할 | 정의 |
 |--------|------|------|
 | **terraform-iac** (이 레포) | **배포용** | `terraform init` / `plan` / `apply`를 실행하는 쪽. 스택별 디렉터리, Backend 설정, `terraform.tfvars`, 배포 순서가 여기 있음. |
-| **terraform-modules** ([GitHub](https://github.com/kimchibee/terraform-modules)) | **공통 모듈** | Hub VNet, Spoke VNet, Monitoring Storage, Log Analytics, APIM/OpenAI/AI Foundry 등 **재사용 모듈**만 보관. **apply는 하지 않음.** |
+| **terraform-modules** ([GitHub](https://github.com/kimchibee/terraform-modules)) | **공통 모듈** | AVM 기반 `resource-group`, `vnet`, `subnet`, `private-endpoint`, `api-management-service`, `cognitive-services-account`, `virtual-machine` 등 **재사용 모듈**만 보관. **apply는 하지 않음.** |
 
-- **참조 방식**: terraform-iac의 각 스택은 `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=main"` 형태로 **Git 레포만** 참조합니다. 로컬 `modules/` 경로는 사용하지 않습니다.
+- **참조 방식**: terraform-iac의 각 스택은 `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=<branch-or-tag>"` 형태로 **Git 레포만** 참조합니다. 로컬 `modules/` 경로는 사용하지 않습니다.
 - **AVM**: azurerm이 필수인 경우가 아니면 **Azure Verified Module(AVM)** 을 사용합니다.
 - **모듈 버전 업데이트**: terraform-modules 쪽 코드나 `ref`를 바꾼 경우, 해당 스택에서 `terraform init -upgrade` 후 plan/apply
-- **마이그레이션 가이드**: strict AVM Foundation 전환 절차와 deferred 범위는 `NETWORK_SHARED_MIGRATION.md` 참고
+- **동기화 가이드**: 아키텍처 선배포 환경을 Terraform state로 동기화하는 절차는 `ARCHITECTURE_SYNC_SCENARIO_GUIDE.md` 참고
 
 ### 2.2 디렉토리 구조 (terraform-iac)
 
@@ -73,7 +73,7 @@
 - `security-extension`, `common-extra` 같은 추상 디렉토리는 만들지 않습니다.
 - 보안 리소스와 컴퓨트 리소스도 예외 없이 **자기 리소스 종류 아래, 자기 리소스명 리프**에서 관리합니다.
 - NSG, ASG, rule, association 같은 리소스도 `network-security-group/<name>`, `application-security-group/<name>`처럼 **자기 리소스 기준**으로 분리합니다.
-- 현재 남아 있는 `shared`, `workload`, `spoke-subnet-nsg` 같은 **legacy 리프명은 정리 대상**입니다.
+- 현재 구조는 `security-group/*`, `dns/*`, `subnet/*`, `route/*` 등 리소스 종류별 리프 분리 기준으로 운영합니다.
 
 ```
 terraform-iac/
@@ -84,13 +84,21 @@ terraform-iac/
 │   │   │   └── spoke-vnet/              # (1b) 리프 — Spoke VNet, PE NSG 등 (terraform-modules spoke-vnet)
 │   │   ├── resource-group/              # (1a) hub-rg, spoke-rg
 │   │   ├── subnet/                      # (1c) hub-*-subnet, spoke-*-subnet (`01.network/README.md`)
-│   │   ├── application-security-group/  # (1d) keyvault-clients, vm-allowed-clients
-│   │   ├── network-security-group/      # (1e) keyvault-standalone 등
+│   │   ├── security-group/
+│   │   │   ├── application-security-group/  # (1d) keyvault-clients, vm-allowed-clients
+│   │   │   ├── network-security-group/      # (1e) keyvault-standalone, hub-monitoring-vm, hub-pep, spoke-pep
+│   │   │   ├── network-security-rule/       # NSG rule 리프
+│   │   │   └── subnet-network-security-group-association/
+│   │   ├── dns/
+│   │   │   ├── private-dns-zone/
+│   │   │   ├── private-dns-zone-vnet-link/
+│   │   │   ├── dns-private-resolver/
+│   │   │   └── dns-private-resolver-inbound-endpoint/
 │   │   ├── route/                       # (1d) hub-route-default, spoke-route-default (선택)
 │   │   ├── security-policy/             # (1e) hub-sg-policy-default, spoke-sg-policy-default (선택)
 │   │   └── …                            # 기타 리소스 종류 리프 (`azure/dev/01.network/README.md`)
 │   ├── 02.storage/
-│   │   └── monitoring/                  # (2) 리프 — Key Vault, Monitoring Storage, PE (`monitoring-storage/` 모듈)
+│   │   └── monitoring/                  # (2) 리프 — Key Vault, Monitoring Storage, PE (AVM wrapper 조합)
 │   ├── 03.shared-services/
 │   │   ├── log-analytics/               # (3a) 리프 — Log Analytics Workspace
 │   │   └── shared/                      # (3b) 리프 — Solutions, Action Group, Dashboard (LA state 참조)
@@ -111,13 +119,13 @@ terraform-iac/
 └── .github/workflows/                  # (선택) CI 워크플로
 ```
 
-- **`01`~`06`도 동일 원칙**: 위 표의 **리프 경로**에 `main.tf` 등이 있으며, state 키는 `azure/dev/<리프 경로>/terraform.tfstate` 입니다. **`07.identity` / `08.rbac` / `09.connectivity`** 역시 리프별 독립 state입니다. 리프 **안의** `hub-vnet/`, `monitoring-storage/` 등은 모듈 전용 디렉터리(apply 없음)입니다.
+- **`01`~`06`도 동일 원칙**: 위 표의 **리프 경로**에 `main.tf` 등이 있으며, state 키는 `azure/dev/<리프 경로>/terraform.tfstate` 입니다. **`07.identity` / `08.rbac` / `09.connectivity`** 역시 리프별 독립 state입니다.
 - **backend.hcl**은 저장소에 포함되지 않으며, **Bootstrap 적용 후** `./scripts/generate-backend-hcl.sh` 실행으로 각 스택 디렉터리에 생성됩니다.
 
 **변수 관리 방식 (스택 공통)**  
 - **루트**: 구독 ID, backend, location, tags, remote_state로 얻는 컨텍스트(리소스 그룹명·서브넷 ID 등)만 관리.  
 - **하위 폴더**: 각 리소스의 **이름·사이즈·옵션**(주소 공간, 서브넷, 보존 일수, 역할 이름 등)은 **해당 폴더의 variables.tf 기본값**에서 관리.  
-→ 신규 인스턴스 추가 시: **폴더 복사** → **복사한 폴더의 variables.tf 기본값만 수정** → **루트 main.tf에 module 블록만 추가**. 루트 `variables.tf`·`terraform.tfvars`에 인스턴스별 변수를 추가하지 않음. (예: compute의 VM, network의 Spoke, storage의 monitoring-storage, shared-services의 log-analytics, rbac의 그룹.)
+→ 신규 인스턴스 추가 시: **리프 복제 또는 신규 리프 생성** → **해당 리프의 variables/locals 기본값 수정** → **필요한 참조 output 추가** 순으로 반영합니다.
 
 ### 2.3 스택별 배포 리소스
 
@@ -131,7 +139,7 @@ terraform-iac/
 | **storage** | Hub | Key Vault, Storage Account(모니터링 로그용), Private Endpoint |
 | **shared-services** | Hub | Log Analytics Workspace, Solutions, Action Group, Dashboard |
 | **apim** | Spoke | API Management, 관련 Private Endpoint·DNS |
-| **ai-services** | Spoke | Azure OpenAI, AI Foundry(ML Workspace), 관련 Private Endpoint·Private DNS Zone |
+| **ai-services** | Spoke | Azure OpenAI, AI Foundry(ML Workspace), AI Foundry 의존 리소스(Storage/Key Vault/Log Analytics/App Insights), 관련 Private Endpoint |
 | **compute** | Hub | Linux VM(Monitoring), Windows VM(예시), Managed Identity |
 | **rbac** | Hub/Spoke | Role Assignment (Monitoring VM, 그룹 역할) + 그룹 멤버십 등록·변경·삭제(Terraform) |
 | **connectivity** | Hub(주로) / Spoke(피어링 한쪽) | VNet Peering(Hub↔Spoke), Hub 진단 설정 — 리프별 state (`09.connectivity/README.md`) |
@@ -143,16 +151,16 @@ terraform-iac/
 - **azurerm (루트/로컬에서 직접)**: 해당 스택의 루트 또는 로컬 모듈에서 `resource "azurerm_*"` / `data "azurerm_*"`를 직접 사용하는지 여부.
 - **AVM (모듈)**: AVM을 통해 모듈을 사용하는지. 데이터 저장·모듈화 등으로 azurerm을 함께 쓰는 경우도 있음.
 
-| 스택 | azurerm (루트/로컬에서 직접) | AVM (모듈) | 비고 |
+| 스택 | azurerm (루트/리프에서 직접) | AVM (모듈) | 현황 비고 |
 |------|:---------------------------:|:----------:|------|
-| **network** | ✅ (subnet, DNS, resolver, VPN, rule/association 리프) | ✅ | strict AVM Foundation in-scope: `resource-group`, `vnet`, `application-security-group`, `network-security-group`, `route`, `security-policy` |
-| **storage** | ✅ (`monitoring-storage` hybrid 내부 예외) | ✅ | strict AVM Foundation에서는 deferred |
-| **shared-services** | ✅ `shared` (non-AVM composite) | ✅ `log-analytics` | strict AVM Foundation in-scope: `log-analytics`, deferred: `shared` |
-| **apim** | ✅ (워크로드 로직) | ✅ (`spoke-workloads`) | strict AVM Foundation에서는 deferred |
-| **ai-services** | ✅ (워크로드 로직) | ✅ (`spoke-workloads`) | strict AVM Foundation에서는 deferred |
-| **compute** | ✅ (`virtual-machine` azurerm 중심) | — | strict AVM Foundation에서는 deferred |
-| **rbac** | ✅ 각 리프 `main.tf` | — | `azurerm_role_assignment`, `azuread_group_member` 등. |
-| **connectivity** | ✅ `diagnostics/hub` (`azurerm_monitor_diagnostic_setting`) | ✅ `peering/*` (Git `vnet-peering`) | strict AVM Foundation에서는 deferred |
+| **network** | ✅ | ✅ | `security-group/*`, `dns/*`, `subnet/*`, `vnet/*`, `route/*` 리프 조합으로 운영 |
+| **storage** | ✅ | ✅ | `monitoring` 리프에서 AVM wrapper + azurerm data/resource 병행 |
+| **shared-services** | ✅ | ✅ | `log-analytics`는 AVM wrapper 중심, `shared`는 운영 리소스 조합 |
+| **apim** | ✅ | ✅ | `api-management-service` 모듈 + 리프 오케스트레이션 |
+| **ai-services** | ✅ | ✅ | `cognitive-services-account`, `private-endpoint` 모듈 + ML Workspace 의존 리소스 직접 관리 |
+| **compute** | ✅ | ✅ | `virtual-machine` 모듈 사용, 리프에서 NIC/ASG/identity 참조 오케스트레이션 |
+| **identity/rbac** | ✅ | ❌ | Entra/Azure RBAC 리소스 직접 관리 (`azuread_*`, `azurerm_role_assignment`) |
+| **connectivity** | ✅ | ✅ | `diagnostics/hub`는 azurerm, `peering/*`는 `vnet-peering` 모듈 |
 
 ---
 
@@ -495,6 +503,19 @@ key                  = "azure/dev/<leaf-path>/terraform.tfstate"
    `cd azure/dev/05.ai-services` 후 `terraform plan -var-file=terraform.tfvars` → `terraform apply -var-file=terraform.tfvars`
 
 - 예시와 상세 옵션은 `azure/dev/05.ai-services/workload/terraform.tfvars.example` 및 `docs/AZURE-OPENAI-QUOTA-AND-MODELS.md`(있는 경우)를 참고하세요.
+
+### 3.4 아키텍처 선배포 환경 동기화 가이드
+
+이미 Azure에 리소스가 배포된 상태(아키텍처 기준)에서 현재 Terraform 코드와 state를 동기화해야 하는 경우, 아래 문서를 기준으로 진행합니다.
+
+- `ARCHITECTURE_SYNC_SCENARIO_GUIDE.md`
+
+핵심 절차:
+
+1. 네이밍 룰/구독/Provider 등록 사전 점검
+2. 리프별 `init -> plan -> import -> plan -> apply`
+3. 드리프트 최소화(운영 리소스 재생성 회피) 기준으로 코드/상태 정렬
+4. 최종 검증(피어링, NSG/ASG, PE, remote state output)
 
 ---
 
@@ -910,4 +931,5 @@ resource "azurerm_role_assignment" "pilot_vm_key_vault_reader" {
   - 각 스택 README에는 **「0. 복사/붙여넣기용 배포 명령어」** 절이 있어, 명령어 블록을 그대로 복사해 터미널에 붙여넣기만 하면 됩니다.  
   - **변수 관리**: 루트는 컨텍스트(구독·backend·remote_state 출력)만, 리소스 정보(이름·사이즈·옵션)는 **해당 하위 폴더 variables.tf 기본값**에서 관리합니다. 신규 인스턴스 추가 시 **폴더 복사** → **그 폴더 variables.tf만 수정** → **루트 main.tf에 module 블록만 추가**하면 됩니다. (각 스택 README의 「변수 관리 방식」「추가 가이드」 참고.)
 - **Backend·backend.hcl 생성**: `bootstrap/backend/README.md`.
+- **선배포 아키텍처 동기화(import/state 정리) 시나리오**: `ARCHITECTURE_SYNC_SCENARIO_GUIDE.md`.
 - **자주 나오는 오류**: 구독 Provider 미등록(409) → [3.1 구독 Resource Provider 등록](#31-구독-resource-provider-필수-등록). OpenAI 쿼터 부족 → [3.3 AI 모델 지정](#33-ai-모델-지정-방법-가이드-ai-services-스택).
