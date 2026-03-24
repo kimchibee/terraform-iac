@@ -50,7 +50,7 @@ resource "azurerm_storage_account" "tf_state" {
   min_tls_version          = "TLS1_2"
 
   # Security (Backend는 init/plan/apply 시 접근 필요; Private Endpoint 배포 후 false 전환 가능)
-  public_network_access_enabled = true
+  public_network_access_enabled   = true
   allow_nested_items_to_be_public = false
 
   # Enable versioning

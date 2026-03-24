@@ -1,0 +1,29 @@
+# Hub Subnet/NSG 리프 — vnet/hub-vnet 이후 적용
+project_name  = "test"
+environment   = "dev"
+location      = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+}
+
+hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# backend_resource_group_name  = "..."
+# backend_storage_account_name = "..."
+# backend_container_name       = "tfstate"
+
+# securitygroup/hub 선행 시 ASG·standalone NSG ID를 그 state에서 읽음
+# use_securitygroup_prereq = true
+
+# enable_keyvault_sg = true
+# hub_subnet_names_attach_keyvault_sg = []
+# hub_nsg_keys_add_keyvault_rule = ["monitoring_vm"]
+# enable_pe_inbound_from_asg = true
+# keyvault_clients_asg_name = "keyvault-clients-asg"
+
+# enable_vm_access_sg = true
+# vm_access_target_nsg_keys = ["monitoring_vm"]
+# vm_access_destination_ports = ["22", "3389"]

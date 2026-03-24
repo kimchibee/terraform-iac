@@ -1,0 +1,15 @@
+project_name = "test"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+}
+
+hub_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# backend_resource_group_name  = "..."
+# backend_storage_account_name = "..."
+# backend_container_name       = "tfstate"
+
+# deploy_azure_firewall = true
+# firewall_sku_tier     = "Standard"

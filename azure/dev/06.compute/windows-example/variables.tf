@@ -1,21 +1,8 @@
-#--------------------------------------------------------------
-# Windows VM 모듈 변수
-# 루트에서 전달: name_prefix, resource_group_name, subnet_id, location, tags, application_security_group_ids, admin_password(보안)
-# 이 폴더에서 관리(기본값): vm_name_suffix, vm_size, admin_username, enable_vm, vm_extensions
-# 폴더 복제 시 이 파일의 기본값만 수정하면 됨. admin_password 는 루트 tfvars 에만 둠.
-#--------------------------------------------------------------
-
-# ---- 루트에서만 전달 (컨텍스트) ----
-variable "name_prefix" {
-  description = "리소스 이름 접두사 (루트에서 project_name 기반으로 전달)"
-  type        = string
-}
-
-variable "resource_group_name" {
+variable "project_name" {
   type = string
 }
 
-variable "subnet_id" {
+variable "environment" {
   type = string
 }
 
@@ -28,28 +15,45 @@ variable "tags" {
   default = {}
 }
 
-variable "application_security_group_ids" {
-  type    = list(string)
-  default = []
+variable "hub_subscription_id" {
+  type = string
 }
 
-# admin_password 는 보안상 루트 tfvars 에만 두고 루트에서 전달
+variable "spoke_subscription_id" {
+  type = string
+}
+
+variable "backend_resource_group_name" {
+  type = string
+}
+
+variable "backend_storage_account_name" {
+  type = string
+}
+
+variable "backend_container_name" {
+  type    = string
+  default = "tfstate"
+}
+
+variable "application_security_group_keys" {
+  type    = list(string)
+  default = ["keyvault_clients", "vm_allowed_clients"]
+}
+
 variable "admin_password" {
   type      = string
   sensitive = true
 }
 
-# ---- 이 폴더에서 관리 (리소스별 기본값, 복제 시 여기만 수정) ----
 variable "vm_name_suffix" {
-  description = "Azure VM 리소스 이름 접미사. 최종 리소스명 = name_prefix-vm_name_suffix (예: win-example → test-x-x-win-example)"
-  type        = string
-  default     = "win-example"
+  type    = string
+  default = "win-example"
 }
 
 variable "vm_computer_name_suffix" {
-  description = "Windows OS 호스트명(computer name) 접미사. 최종 호스트명 = name_prefix-vm_computer_name_suffix, 최대 15자 (예: winex → test-x-x-winex)"
-  type        = string
-  default     = "winex"
+  type    = string
+  default = "winex"
 }
 
 variable "vm_size" {

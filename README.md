@@ -35,43 +35,59 @@
 - **참조 방식**: terraform-iac의 각 스택은 `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=main"` 형태로 **Git 레포만** 참조합니다. 로컬 `modules/` 경로는 사용하지 않습니다.
 - **AVM**: azurerm이 필수인 경우가 아니면 **Azure Verified Module(AVM)** 을 사용합니다.
 - **모듈 버전 업데이트**: terraform-modules 쪽 코드나 `ref`를 바꾼 경우, 해당 스택에서 `terraform init -upgrade` 후 plan/apply
+- **마이그레이션 가이드**: strict AVM Foundation 전환 절차와 deferred 범위는 `NETWORK_SHARED_MIGRATION.md` 참고
 
 ### 2.2 디렉토리 구조 (terraform-iac)
 
-배포·관리 체계에 맞춘 실제 디렉터리 구조입니다. **plan/apply는 각 스택의 루트에서만** 실행하며, 스택당 State 1개입니다.
+배포·관리 체계에 맞춘 실제 디렉터리 구조입니다. **plan/apply는 리프 폴더에서만** 실행합니다. (`01.network` 등 상위 폴더는 분류·README만 두는 경우가 많음.)
+
+**강제 규칙**
+
+- 상위 디렉토리는 **리소스 종류**로 나눕니다.
+- 리프 디렉토리는 **리소스명**으로 만듭니다.
+- 각 리프는 **자기 디렉토리 이름에 해당하는 리소스만** 관리합니다.
+- `security-extension`, `common-extra` 같은 추상 디렉토리는 만들지 않습니다.
+- 보안 리소스와 컴퓨트 리소스도 예외 없이 **자기 리소스 종류 아래, 자기 리소스명 리프**에서 관리합니다.
+- NSG, ASG, rule, association 같은 리소스도 `network-security-group/<name>`, `application-security-group/<name>`처럼 **자기 리소스 기준**으로 분리합니다.
+- 현재 남아 있는 `shared`, `workload`, `spoke-subnet-nsg` 같은 **legacy 리프명은 정리 대상**입니다.
 
 ```
 terraform-iac/
-├── azure/dev/                          # 스택별 배포 디렉터리 (각 스택 루트에서 plan/apply, State 키: azure/dev/01.network/terraform.tfstate 등)
-│   ├── 01.network/                     # (1) Hub/Spoke VNet, VPN Gateway, DNS Resolver, NSG
-│   │   ├── hub-vnet/                   # Hub VNet 하위 모듈
-│   │   ├── spoke-vnet/                 # Spoke VNet 하위 모듈 (신규 Spoke 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
-│   │   ├── keyvault-sg/                # (옵션) Key Vault 접근 허용 NSG·ASG
-│   │   └── vm-access-sg/               # (옵션) VM 접속 허용 ASG·NSG 규칙
-│   ├── 02.storage/                     # (2) Key Vault, Monitoring Storage, Private Endpoint
-│   │   └── monitoring-storage/         # 하위 모듈 (동일 세트 추가 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
-│   ├── 03.shared-services/             # (3) Log Analytics, Solutions, Action Group, Dashboard
-│   │   ├── log-analytics-workspace/   # 하위 모듈 (보존 일수 등 폴더 variables.tf 기본값)
-│   │   └── shared-services/            # 하위 모듈 (enable 등 폴더 variables.tf 기본값)
-│   ├── 04.apim/                         # (4) API Management (Internal VNet). 하위 모듈 없음, 루트에서 Git 모듈 참조
-│   ├── 05.ai-services/                  # (5) Azure OpenAI, AI Foundry. 하위 모듈 없음, 루트에서 Git 모듈 참조
-│   ├── 06.compute/                      # (6) VM·Managed Identity (스택 루트에서 plan/apply, State 1개)
-│   │   ├── linux-monitoring-vm/        # Linux VM 모듈 (신규 VM 시 폴더 복사 → 해당 폴더 variables.tf만 수정 → 루트에 module만 추가)
-│   │   └── windows-example/            # Windows VM 모듈 (동일. Windows만 루트에 admin_password 1개 추가)
-│   ├── 07.rbac/                         # (7) Monitoring VM 역할 할당 + 그룹 기반 역할·멤버십 관리
-│   │   ├── admin-group/                # 관리자 그룹 (역할 부여)
-│   │   │   └── admin-users/            # 멤버십 관리: 그룹 소속 사용자·그룹 등록·변경·삭제(Terraform)
-│   │   └── ai-developer-group/         # AI 개발자 그룹 (역할 부여). 신규 그룹 시 폴더 복사
-│   │       └── ai-developer-users/     # 멤버십 관리: 그룹 소속 사용자·그룹 등록·변경·삭제(Terraform)
-│   └── 08.connectivity/                 # (8) VNet Peering, 진단 설정. 하위 모듈 없음
+├── azure/dev/
+│   ├── 01.network/
+│   │   ├── vnet/
+│   │   │   ├── hub-vnet/                # (1a) 리프 — Hub VNet, VPN, DNS, NSG (terraform-modules hub-vnet)
+│   │   │   └── spoke-vnet/              # (1b) 리프 — Spoke VNet, PE NSG 등 (terraform-modules spoke-vnet)
+│   │   ├── resource-group/              # (1a) hub-rg, spoke-rg
+│   │   ├── subnet/                      # (1c) hub-*-subnet, spoke-*-subnet (`01.network/README.md`)
+│   │   ├── application-security-group/  # (1d) keyvault-clients, vm-allowed-clients
+│   │   ├── network-security-group/      # (1e) keyvault-standalone 등
+│   │   ├── route/                       # (1d) hub-route-default, spoke-route-default (선택)
+│   │   ├── security-policy/             # (1e) hub-sg-policy-default, spoke-sg-policy-default (선택)
+│   │   └── …                            # 기타 리소스 종류 리프 (`azure/dev/01.network/README.md`)
+│   ├── 02.storage/
+│   │   └── monitoring/                  # (2) 리프 — Key Vault, Monitoring Storage, PE (`monitoring-storage/` 모듈)
+│   ├── 03.shared-services/
+│   │   ├── log-analytics/               # (3a) 리프 — Log Analytics Workspace
+│   │   └── shared/                      # (3b) 리프 — Solutions, Action Group, Dashboard (LA state 참조)
+│   ├── 04.apim/
+│   │   └── workload/                    # (4) 리프 — APIM (Git 모듈)
+│   ├── 05.ai-services/
+│   │   └── workload/                    # (5) 리프 — OpenAI, AI Foundry
+│   ├── 06.compute/
+│   │   ├── linux-monitoring-vm/         # (6) 리프 — Linux VM + MI
+│   │   └── windows-example/            # (6) 리프 — Windows 예시 VM
+│   ├── 07.identity/                     # (7) Entra 멤버십 — 리프 `group-membership/*`
+│   ├── 08.rbac/                         # (8) Azure RBAC — 리프 `group/`, `principal/`, `authorization/` (`08.rbac/README.md`)
+│   └── 09.connectivity/                 # (9) Peering·진단 — 리프 `peering/*`, `diagnostics/*` (`09.connectivity/README.md`)
 ├── bootstrap/backend/                  # Backend용 Storage Account·Container (최초 1회). backend.hcl 사용 안 함
 ├── scripts/
-│   └── generate-backend-hcl.sh         # Bootstrap apply 후 실행 → azure/dev/01.network, 02.storage, ... 각 스택에 backend.hcl 생성
+│   └── generate-backend-hcl.sh         # Bootstrap apply 후 실행 → 각 리프 디렉터리에 backend.hcl 생성 (`INFRA_LEAVES` 등)
 ├── config/                             # (선택) 정책·설정 예시 (acr-policy.json, apim-policy.xml, openai-deployments.json)
 └── .github/workflows/                  # (선택) CI 워크플로
 ```
 
-- 각 스택 **루트**에는 `main.tf`, `variables.tf`, `outputs.tf`, `backend.tf`, `provider.tf`, `terraform.tfvars.example` 등이 있습니다. **하위 디렉터리는 모듈**로만 사용(하위에서 backend/remote_state 없음).
+- **`01`~`06`도 동일 원칙**: 위 표의 **리프 경로**에 `main.tf` 등이 있으며, state 키는 `azure/dev/<리프 경로>/terraform.tfstate` 입니다. **`07.identity` / `08.rbac` / `09.connectivity`** 역시 리프별 독립 state입니다. 리프 **안의** `hub-vnet/`, `monitoring-storage/` 등은 모듈 전용 디렉터리(apply 없음)입니다.
 - **backend.hcl**은 저장소에 포함되지 않으며, **Bootstrap 적용 후** `./scripts/generate-backend-hcl.sh` 실행으로 각 스택 디렉터리에 생성됩니다.
 
 **변수 관리 방식 (스택 공통)**  
@@ -94,7 +110,7 @@ terraform-iac/
 | **ai-services** | Spoke | Azure OpenAI, AI Foundry(ML Workspace), 관련 Private Endpoint·Private DNS Zone |
 | **compute** | Hub | Linux VM(Monitoring), Windows VM(예시), Managed Identity |
 | **rbac** | Hub/Spoke | Role Assignment (Monitoring VM, 그룹 역할) + 그룹 멤버십 등록·변경·삭제(Terraform) |
-| **connectivity** | Hub | VNet Peering(Hub↔Spoke), VPN Connection, 진단 설정 |
+| **connectivity** | Hub(주로) / Spoke(피어링 한쪽) | VNet Peering(Hub↔Spoke), Hub 진단 설정 — 리프별 state (`09.connectivity/README.md`) |
 
 - 상세 리소스 이름·서브넷 목록은 각 스택 디렉터리의 `README.md`(예: `azure/dev/01.network/README.md`, `azure/dev/06.compute/README.md`)를 참고하세요.
 
@@ -105,14 +121,14 @@ terraform-iac/
 
 | 스택 | azurerm (루트/로컬에서 직접) | AVM (모듈) | 비고 |
 |------|:---------------------------:|:----------:|------|
-| **network** | ✅ keyvault-sg (NSG, ASG, rule 등) | ✅ | 공동모듈(hub-vnet, spoke-vnet) 호출 + 로컬 keyvault-sg에서 NSG·ASG 등 azurerm 직접 사용. |
-| **storage** | — | ✅ | |
-| **shared-services** | — | ✅ | |
-| **apim** | — | ✅ | |
-| **ai-services** | — | ✅ | |
-| **compute** | — | ✅ | |
-| **rbac** | ✅ main.tf, ai-developer-group (role_assignment) | — | 루트 main.tf 및 ai-developer-group에서 azurerm_role_assignment만 사용. |
-| **connectivity** | — | ✅ | |
+| **network** | ✅ (subnet, DNS, resolver, VPN, rule/association 리프) | ✅ | strict AVM Foundation in-scope: `resource-group`, `vnet`, `application-security-group`, `network-security-group`, `route`, `security-policy` |
+| **storage** | ✅ (`monitoring-storage` hybrid 내부 예외) | ✅ | strict AVM Foundation에서는 deferred |
+| **shared-services** | ✅ `shared` (non-AVM composite) | ✅ `log-analytics` | strict AVM Foundation in-scope: `log-analytics`, deferred: `shared` |
+| **apim** | ✅ (워크로드 로직) | ✅ (`spoke-workloads`) | strict AVM Foundation에서는 deferred |
+| **ai-services** | ✅ (워크로드 로직) | ✅ (`spoke-workloads`) | strict AVM Foundation에서는 deferred |
+| **compute** | ✅ (`virtual-machine` azurerm 중심) | — | strict AVM Foundation에서는 deferred |
+| **rbac** | ✅ 각 리프 `main.tf` | — | `azurerm_role_assignment`, `azuread_group_member` 등. |
+| **connectivity** | ✅ `diagnostics/hub` (`azurerm_monitor_diagnostic_setting`) | ✅ `peering/*` (Git `vnet-peering`) | strict AVM Foundation에서는 deferred |
 
 ---
 
@@ -203,19 +219,28 @@ az provider show --namespace Microsoft.OperationalInsights --query "registration
 |------|------|----------|--------------------------------------|------|
 | 0 | Bootstrap | `bootstrap/backend` | Resource Group, Storage Account, Storage Container (이름은 terraform.tfvars 기준) | Backend State용. **최초 1회.** `terraform init`만 사용(backend.hcl 없음). |
 | - | **backend.hcl 생성** | 프로젝트 루트 | — | Bootstrap **apply 완료 후** `./scripts/generate-backend-hcl.sh` 실행. |
-| 1 | network | `azure/dev/01.network` | **Hub:** `test-x-x-rg`, `test-x-x-vnet`, 서브넷(GatewaySubnet, DNSResolver-Inbound, AzureFirewallSubnet, AzureFirewallManagementSubnet, AppGatewaySubnet, Monitoring-VM-Subnet, pep-snet), `test-x-x-vpng`, `test-x-x-vpng-pip`, `test-x-x-pdr`, Private DNS Zone(14종), `test-monitoring-vm-nsg`, `test-pep-nsg`, (옵션) `test-x-x-keyvault-sg`, `test-x-x-vm-allowed-clients-asg`. **Spoke:** `test-x-x-spoke-rg`, `test-x-x-spoke-vnet`, 서브넷(apim-snet, pep-snet), `test-spoke-pep-nsg`, Private DNS Zone(5종), VNet Link | Hub/Spoke VNet, VPN Gateway, DNS Resolver, NSG |
-| 2 | storage | `azure/dev/02.storage` | Key Vault `test-hub-kv`, Monitoring Storage Account(apimlog, vpnglog, vnetlog, nsglog, aoailog, aifoundrylog, acrlog, spkvlog 등), Key Vault·Storage용 Private Endpoint | Key Vault, Monitoring Storage, PE |
-| 3 | shared-services | `azure/dev/03.shared-services` | Log Analytics Workspace `test-x-x-law`, Solutions, Action Group, Dashboard | Log Analytics, Solutions, Action Group, Dashboard |
-| 4 | apim | `azure/dev/04.apim` | API Management(이름은 tfvars/변수 기준), APIM·관련 Private Endpoint, Private DNS Zone 링크 | API Management |
-| 5 | ai-services | `azure/dev/05.ai-services` | Azure OpenAI 리소스, Azure AI Foundry(ML Workspace), OpenAI·ML·Notebooks·Storage 등 Private Endpoint, Private DNS Zone | Azure OpenAI, AI Foundry (모델은 3.3 참고) |
-| 6 | compute | `azure/dev/06.compute` | Linux VM `test-x-x-monitoring-vm`, Windows VM `test-x-x-win-example`, 각 VM의 Managed Identity, NIC, OS Disk | Linux/Windows VM. VM 추가 시 폴더 복사 후 루트에 module·변수 추가 |
-| 7 | rbac | `azure/dev/07.rbac` | Role Assignment(Monitoring VM → Storage Blob Data Contributor, Key Vault Secrets User 등), (옵션) admin-group/ai-developer-group 그룹 역할·멤버십 | Monitoring VM 역할 할당, 그룹 기반 권한 |
-| 8 | connectivity | `azure/dev/08.connectivity` | VNet Peering `test-x-x-vnet-to-spoke`, `test-x-x-spoke-vnet-to-hub`, 진단 설정(`test-x-x-vnet-vpng-storage-diag`, `test-x-x-vnet-storage-diag`, NSG 진단 등) | VNet Peering, 진단 설정 |
+| 1a | network-rg-hub | `azure/dev/01.network/resource-group/hub-rg` | Hub Resource Group | 최우선 |
+| 1b | network-asg-hub | `azure/dev/01.network/application-security-group/keyvault-clients`, `.../vm-allowed-clients` | Hub ASG 리프 | hub-rg 이후 |
+| 1c | network-nsg-hub | `azure/dev/01.network/network-security-group/keyvault-standalone` | Hub standalone NSG | hub-rg 이후 |
+| 1d | network-vnet-hub | `azure/dev/01.network/vnet/hub-vnet` | Hub VNet·VPN·DNS(모듈) | hub-rg 이후 |
+| 1e | network-subnet-hub-leaves | `azure/dev/01.network/subnet/hub-gateway-subnet`, `hub-dnsresolver-inbound-subnet`, `hub-azurefirewall-subnet`, `hub-azurefirewall-management-subnet`, `hub-appgateway-subnet`, `hub-monitoring-vm-subnet`, `hub-pep-subnet` | Hub 서브넷 리프 | hub-vnet 이후 |
+| 1f | network-rg-spoke | `azure/dev/01.network/resource-group/spoke-rg` | Spoke Resource Group | hub 이후 |
+| 1g | network-vnet-spoke | `azure/dev/01.network/vnet/spoke-vnet` | Spoke VNet·DNS | spoke-rg 이후 |
+| 1h | network-subnet-spoke-leaves | `azure/dev/01.network/subnet/spoke-apim-subnet`, `azure/dev/01.network/subnet/spoke-pep-subnet` | Spoke 서브넷 리프 | spoke-vnet 이후 |
+| 1i | network-route-* | `azure/dev/01.network/route/hub-route-default` · `.../route/spoke-route-default` | Hub/Spoke UDR(모니터링↔워크로드 경로, NVA 시) | vnet 이후 |
+| 2 | storage | `azure/dev/02.storage/monitoring` | Key Vault, Monitoring Storage, Private Endpoint | state는 monitoring 리프 |
+| 3 | shared-services | `azure/dev/03.shared-services/log-analytics` → `.../shared` | LA → Action Group·Dashboard 순으로 적용 | 리프 2개 |
+| 4 | apim | `azure/dev/04.apim/workload` | API Management 및 관련 PE·DNS | workload 리프 |
+| 5 | ai-services | `azure/dev/05.ai-services/workload` | OpenAI, AI Foundry 등 | workload 리프 |
+| 6 | compute | `azure/dev/06.compute/linux-monitoring-vm`, `.../windows-example` | Linux/Windows VM, Managed Identity | VM별 리프 |
+| 7 | identity | `azure/dev/07.identity/...` | Entra 멤버십 | **배포 순서상 `08.rbac`보다 앞(선택)** |
+| 8 | rbac | `azure/dev/08.rbac/...` | 그룹·주체·authorization 역할 | `08.rbac/README.md` |
+| 9 | connectivity | `azure/dev/09.connectivity/...` | Peering, 진단 설정 | `09.connectivity/README.md` |
 
 **각 스택 공통 절차:**
 
 ```bash
-cd azure/dev/01.network   # 또는 02.storage, 03.shared-services, ... 08.connectivity
+cd azure/dev/01.network/vnet/hub-vnet   # 또는 `vnet/spoke-vnet`, 각 스택 리프 경로(`azure/dev/*/README.md`, `09.connectivity/README.md`)
 cp terraform.tfvars.example terraform.tfvars
 # terraform.tfvars 편집 (구독 ID, backend 관련 변수 등)
 terraform init -backend-config=backend.hcl
@@ -224,12 +249,12 @@ terraform apply -var-file=terraform.tfvars
 ```
 
 - **backend.hcl**은 `./scripts/generate-backend-hcl.sh` 실행으로 생성됩니다. 수동 작성 방법은 **Bootstrap 스택 README** (`bootstrap/backend/README.md`)를 참고하세요.
-- **삭제(롤백) 시**: 스택을 제거할 때는 **배포의 역순**으로 진행하는 것이 안전합니다. **08.connectivity → 07.rbac → 06.compute → 05.ai-services → 04.apim → 03.shared-services → 02.storage → 01.network**. 각 스택 **루트** 디렉터리에서 `terraform destroy -var-file=terraform.tfvars` 실행.
+- **삭제(롤백) 시**: **배포의 역순**이 안전합니다. **`09.connectivity` 각 리프** → `08.rbac`·`07.identity` 각 리프 → `06.compute` VM 리프 → … → `01.network/route/*` → `01.network/security-policy/*` → `01.network/subnet/spoke-*` → `01.network/vnet/spoke-vnet` → `01.network/resource-group/spoke-rg` → `01.network/subnet/hub-*` → `01.network/vnet/hub-vnet` → `01.network/network-security-group/*` → `01.network/application-security-group/*` → `01.network/resource-group/hub-rg`. 세부는 `01.network/README.md`, `08.rbac/README.md`, `09.connectivity/README.md` 참고.
 
 ### 3.3 AI 모델 지정 방법 가이드 (ai-services 스택)
 
 - **Azure OpenAI 모델 배포**는 리전별 **쿼터**가 필요합니다. 쿼터 없으면 `InsufficientQuota` 오류가 발생합니다.
-- **쿼터 승인 전**: `azure/dev/05.ai-services/terraform.tfvars`에서 `openai_deployments = []` 로 두고 배포하면 **모델 배포 없이** AI Foundry, Private Endpoints 등만 생성됩니다.
+- **쿼터 승인 전**: `azure/dev/05.ai-services/workload/terraform.tfvars`에서 `openai_deployments = []` 로 두고 배포하면 **모델 배포 없이** AI Foundry, Private Endpoints 등만 생성됩니다.
 - **쿼터 승인 후** 모델을 배포하려면:
 
 1. **쿼터 확인**  
@@ -237,7 +262,7 @@ terraform apply -var-file=terraform.tfvars
    쿼터 요청: [https://aka.ms/oai/stuquotarequest](https://aka.ms/oai/stuquotarequest)
 
 2. **변수 수정**  
-   `azure/dev/05.ai-services/terraform.tfvars`에서:
+   `azure/dev/05.ai-services/workload/terraform.tfvars`에서:
    - `openai_deployments = []` 를 제거하고
    - 사용할 모델 블록을 아래 형식으로 추가합니다.
 
@@ -252,7 +277,7 @@ terraform apply -var-file=terraform.tfvars
 3. **재적용**  
    `cd azure/dev/05.ai-services` 후 `terraform plan -var-file=terraform.tfvars` → `terraform apply -var-file=terraform.tfvars`
 
-- 예시와 상세 옵션은 `azure/dev/05.ai-services/terraform.tfvars.example` 및 `docs/AZURE-OPENAI-QUOTA-AND-MODELS.md`(있는 경우)를 참고하세요.
+- 예시와 상세 옵션은 `azure/dev/05.ai-services/workload/terraform.tfvars.example` 및 `docs/AZURE-OPENAI-QUOTA-AND-MODELS.md`(있는 경우)를 참고하세요.
 
 ---
 
@@ -312,25 +337,25 @@ Peering이 **Connected**이면 정상입니다.
 
 | 순서 | 작업 | 복제할 폴더 | 수정·추가할 파일 |
 |------|------|-------------|------------------|
-| 1 | 새 Spoke VNet | `01.network/spoke-vnet` → `01.network/spoke-vnet-pilot` | `spoke-vnet-pilot/variables.tf`, `01.network/main.tf`, `01.network/outputs.tf` |
+| 1 | 새 Spoke VNet | `01.network/vnet/spoke-vnet/spoke-vnet` → `spoke-vnet-pilot` | `spoke-vnet-pilot/variables.tf`, `vnet/spoke-vnet/main.tf`, `vnet/spoke-vnet/outputs.tf` |
 | 2 | 방화벽(Key Vault 접근) | (없음) | `01.network/terraform.tfvars` |
 | 3 | 새 Linux 서버(Spoke 배치) | `06.compute/linux-monitoring-vm` → `06.compute/linux-pilot-vm` | `linux-pilot-vm/variables.tf`, `06.compute/main.tf`, `06.compute/outputs.tf` |
-| 4 | Key Vault 권한(RBAC) | (없음) | `07.rbac/main.tf` |
+| 4 | Key Vault 권한(RBAC) | (없음) | `08.rbac/main.tf` |
 
-**적용 순서:** `01.network` → `06.compute` → `07.rbac` (storage는 기존 Hub Key Vault 사용, 변경 없음).
+**적용 순서:** `01.network/resource-group/hub-rg` → `01.network/application-security-group/keyvault-clients`·`vm-allowed-clients` → `01.network/network-security-group/keyvault-standalone` → `01.network/vnet/hub-vnet` → `01.network/subnet/hub-gateway-subnet` 등 Hub 서브넷 리프 → `01.network/subnet/hub-pep-subnet` → `01.network/resource-group/spoke-rg` → `01.network/vnet/spoke-vnet` → `01.network/subnet/spoke-apim-subnet`·`spoke-pep-subnet` → `01.network/route/hub-route-default`·`route/spoke-route-default`(선택) → `02.storage/monitoring` → `03.shared-services/*` → … → `06.compute/*` VM 리프 → `07.identity`(선택) → `08.rbac` → `09.connectivity`.
 
 ### 5.2 새 VNet (Spoke Pilot) 추가
 
 #### 폴더 복제
 
 ```bash
-cd azure/dev/01.network
+cd azure/dev/01.network/vnet/spoke-vnet
 cp -r spoke-vnet spoke-vnet-pilot
 ```
 
-- 복제 결과: `azure/dev/01.network/spoke-vnet-pilot/` (내부 파일 구조는 `spoke-vnet`과 동일)
+- 복제 결과: `azure/dev/01.network/vnet/spoke-vnet/spoke-vnet-pilot/` (내부 파일 구조는 `spoke-vnet`과 동일)
 
-#### 수정: `azure/dev/01.network/spoke-vnet-pilot/variables.tf`
+#### 수정: `azure/dev/01.network/vnet/spoke-vnet/spoke-vnet-pilot/variables.tf`
 
 **역할:** 이 Spoke만의 리소스 정보(RG·VNet·서브넷)를 기본값으로 정의. 복제본이므로 **아래 변수의 기본값만** Pilot용으로 바꿉니다.
 
@@ -473,7 +498,7 @@ keyvault_clients_asg_name  = "keyvault-clients-asg"
 #### 폴더 복제
 
 ```bash
-cd azure/dev/06.compute
+cd azure/dev/06.compute/linux-monitoring-vm
 cp -r linux-monitoring-vm linux-pilot-vm
 ```
 
@@ -580,7 +605,7 @@ output "pilot_vm_identity_principal_id" {
 
 **목표:** Hub에 있는 Key Vault(storage 스택에서 생성)에 대해 Pilot VM의 Managed Identity에 **Key Vault Secrets User**, **Key Vault Reader** 역할을 부여합니다.
 
-#### 수정: `azure/dev/07.rbac/main.tf`
+#### 수정: `azure/dev/08.rbac/main.tf`
 
 **역할:**  
 ① Compute state에서 Pilot VM의 `principal_id`를 읽고,  
@@ -624,7 +649,7 @@ resource "azurerm_role_assignment" "pilot_vm_key_vault_reader" {
 ```
 
 - `enable_key_vault_roles`가 이미 `terraform.tfvars`에서 `true`로 설정되어 있으면, Pilot VM이 배포된 후 RBAC apply 시 위 역할이 부여됩니다.
-- **복제할 폴더 없음.** `07.rbac/main.tf`만 수정합니다.
+- **복제할 폴더 없음.** `08.rbac/main.tf`만 수정합니다.
 
 ### 5.6 배포 순서 요약
 
@@ -641,7 +666,7 @@ resource "azurerm_role_assignment" "pilot_vm_key_vault_reader" {
    - `outputs.tf`에 `pilot_vm_identity_principal_id` 추가  
    - `terraform init -backend-config=backend.hcl && terraform plan -var-file=terraform.tfvars && terraform apply -var-file=terraform.tfvars`
 
-3. **07.rbac**  
+3. **08.rbac**  
    - `main.tf`에 `pilot_vm_principal_id`·`enable_pilot_vm_keyvault_roles` locals 및 Pilot VM용 Key Vault 역할 할당 2개 추가  
    - `terraform init -backend-config=backend.hcl && terraform plan -var-file=terraform.tfvars && terraform apply -var-file=terraform.tfvars`
 
@@ -656,7 +681,7 @@ resource "azurerm_role_assignment" "pilot_vm_key_vault_reader" {
 | `06.compute/linux-pilot-vm/variables.tf` | 폴더 복제 후 `vm_name_suffix`, `vm_size`, `admin_username`, `ssh_private_key_filename` 등 기본값 수정 |
 | `06.compute/main.tf` | `spoke_pilot_rg`, `spoke_pilot_subnet` locals 및 `module "linux_pilot_vm"` 추가 |
 | `06.compute/outputs.tf` | `pilot_vm_identity_principal_id` output 추가 |
-| `07.rbac/main.tf` | `pilot_vm_principal_id`, `enable_pilot_vm_keyvault_roles` locals 및 Pilot VM용 Key Vault 역할 할당 2개 추가 |
+| `08.rbac/main.tf` | `pilot_vm_principal_id`, `enable_pilot_vm_keyvault_roles` locals 및 Pilot VM용 Key Vault 역할 할당 2개 추가 |
 
 위 순서대로 복제·수정 후 각 스택을 순서대로 적용하면, 새 Pilot VNet 위의 Linux 서버에서 Hub Key Vault로 방화벽·권한이 모두 적용된 상태로 접속할 수 있습니다.
 

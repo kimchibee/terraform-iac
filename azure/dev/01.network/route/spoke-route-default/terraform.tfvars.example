@@ -1,0 +1,30 @@
+project_name  = "test"
+environment   = "dev"
+location      = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+}
+
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# backend_resource_group_name  = "..."
+# backend_storage_account_name = "..."
+# backend_container_name       = "tfstate"
+
+# 피어링만 사용 시: 사용자 정의 경로 없이 Route Table + 서브넷 연결만으로도 운영 가능(bgp_route_propagation_enabled = true)
+# NVA/방화벽 경유 시 예:
+# enable_route_to_hub_monitoring = true
+# hub_monitoring_route_next_hop_type = "VirtualAppliance"
+# hub_monitoring_route_next_hop_ip   = "10.0.2.4"
+
+# 또는 custom_routes 로 직접 정의:
+# custom_routes = [
+#   {
+#     name                   = "to-hub-monitoring-vm"
+#     address_prefix         = "10.0.1.0/24"
+#     next_hop_type          = "VirtualAppliance"
+#     next_hop_in_ip_address = "10.0.2.4"
+#   }
+# ]
