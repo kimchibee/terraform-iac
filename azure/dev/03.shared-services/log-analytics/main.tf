@@ -1,4 +1,5 @@
-# Log Analytics Workspace ?�독 리프 (shared 리프가 remote_state�?참조)
+# Log Analytics Workspace standalone leaf
+# (consumed by shared leaf via remote state)
 data "terraform_remote_state" "network" {
   backend = "azurerm"
   config = {

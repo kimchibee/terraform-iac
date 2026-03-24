@@ -510,12 +510,25 @@ key                  = "azure/dev/<leaf-path>/terraform.tfstate"
 
 - `ARCHITECTURE_SYNC_SCENARIO_GUIDE.md`
 
-핵심 절차:
+핵심 목적(중요):
 
-1. 네이밍 룰/구독/Provider 등록 사전 점검
-2. 리프별 `init -> plan -> import -> plan -> apply`
-3. 드리프트 최소화(운영 리소스 재생성 회피) 기준으로 코드/상태 정렬
-4. 최종 검증(피어링, NSG/ASG, PE, remote state output)
+- **목표는 import 자체가 아니라, 현재 콘솔(수동)로 운영 중인 시스템 구성과 Terraform 코드를 먼저 일치시키는 것**입니다.
+- 즉, "기존 리소스는 무조건 import"가 아니라 아래 순서로 **코드 정합화 -> 상태 동기화 -> Terraform-only 운영 전환**을 수행합니다.
+
+권장 절차:
+
+1. **현행 아키텍처 기준선 확정**  
+   - 실제 운영 리소스(이름, SKU, 네트워크 연결, 권한)를 먼저 기준선으로 확정합니다.
+2. **코드 정합화 선행**  
+   - `variables.tf`, `terraform.tfvars`, `locals`를 먼저 수정해 Terraform 코드가 운영 현실과 동일하게 해석되도록 맞춥니다.
+   - 운영 영향이 큰 리소스는 이름 변경보다 코드/변수를 현실에 맞추는 것을 우선합니다.
+3. **상태 동기화(state) 수행**  
+   - 코드 기준과 실제 리소스가 맞는 항목만 `import`로 state에 편입합니다.
+   - Terraform 관리 대상에서 제외할 항목은 리프 분리 또는 enable 플래그로 비활성화해 관리 경계를 명확히 합니다.
+4. **전환 검증 후 Terraform-only 적용**  
+   - 각 리프 `plan`이 무변경(또는 의도 변경)임을 확인한 뒤, 신규 리소스 생성/변경은 Terraform으로만 수행합니다.
+5. **최종 검증**  
+   - 피어링, NSG/ASG, Private Endpoint, remote state output 참조까지 전체 점검합니다.
 
 ---
 
@@ -931,5 +944,5 @@ resource "azurerm_role_assignment" "pilot_vm_key_vault_reader" {
   - 각 스택 README에는 **「0. 복사/붙여넣기용 배포 명령어」** 절이 있어, 명령어 블록을 그대로 복사해 터미널에 붙여넣기만 하면 됩니다.  
   - **변수 관리**: 루트는 컨텍스트(구독·backend·remote_state 출력)만, 리소스 정보(이름·사이즈·옵션)는 **해당 하위 폴더 variables.tf 기본값**에서 관리합니다. 신규 인스턴스 추가 시 **폴더 복사** → **그 폴더 variables.tf만 수정** → **루트 main.tf에 module 블록만 추가**하면 됩니다. (각 스택 README의 「변수 관리 방식」「추가 가이드」 참고.)
 - **Backend·backend.hcl 생성**: `bootstrap/backend/README.md`.
-- **선배포 아키텍처 동기화(import/state 정리) 시나리오**: `ARCHITECTURE_SYNC_SCENARIO_GUIDE.md`.
+- **선배포 아키텍처 동기화(코드 정합화 -> state 동기화 -> Terraform-only 전환) 시나리오**: `ARCHITECTURE_SYNC_SCENARIO_GUIDE.md`.
 - **자주 나오는 오류**: 구독 Provider 미등록(409) → [3.1 구독 Resource Provider 등록](#31-구독-resource-provider-필수-등록). OpenAI 쿼터 부족 → [3.3 AI 모델 지정](#33-ai-모델-지정-방법-가이드-ai-services-스택).

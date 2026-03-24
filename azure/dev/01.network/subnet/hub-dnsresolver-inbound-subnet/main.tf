@@ -1,6 +1,6 @@
 #--------------------------------------------------------------
-# Hub ??DNSResolver-Inbound (`hub-dnsresolver-inbound-subnet`)
-# ?�일 책임: DNS Resolver Inbound Subnet 1�??�성
+# Hub DNSResolver-Inbound (`hub-dnsresolver-inbound-subnet`)
+# Single responsibility: create one DNS Resolver inbound subnet
 #--------------------------------------------------------------
 data "terraform_remote_state" "vnet_hub" {
   backend = "azurerm"

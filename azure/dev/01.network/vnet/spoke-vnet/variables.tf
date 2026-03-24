@@ -37,13 +37,13 @@ variable "backend_container_name" {
 }
 
 variable "spoke_private_dns_zones" {
-  description = "Spoke????Private DNS Zone (Hub?� 중복 ?�임?�페?�스 ?�외). null?�면 기본 �??�용."
+  description = "Private DNS zones for Spoke resources. Use null to apply default map."
   type        = map(string)
   default     = null
 }
 
 variable "rg_suffix" {
-  description = "Resource Group ?�름 ?��???(최종: name_prefix-rg_suffix)"
+  description = "Resource group suffix (final name: name_prefix-rg_suffix)."
   type        = string
   default     = "spoke-rg"
 }
@@ -61,7 +61,7 @@ variable "vnet_address_space" {
 }
 
 variable "subnets" {
-  description = "Spoke ?�브??구성"
+  description = "Spoke subnet definitions."
   type = map(object({
     address_prefixes                      = list(string)
     service_endpoints                     = optional(list(string), [])

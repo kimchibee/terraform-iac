@@ -1,6 +1,6 @@
 #--------------------------------------------------------------
-# Hub ??GatewaySubnet (`hub-gateway-subnet`)
-# ?�일 책임: GatewaySubnet 1�??�성
+# Hub GatewaySubnet (`hub-gateway-subnet`)
+# Single responsibility: create one GatewaySubnet
 #--------------------------------------------------------------
 data "terraform_remote_state" "vnet_hub" {
   backend = "azurerm"

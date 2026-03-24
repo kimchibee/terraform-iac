@@ -29,7 +29,7 @@ variable "backend_container_name" {
 }
 
 variable "iam_role_assignments" {
-  description = "Hub 구독??부?�할 ??���?(use_spoke_provider = false)"
+  description = "Role assignments to create in the Hub subscription (use_spoke_provider = false)."
   type = list(object({
     principal_id         = string
     role_definition_name = string

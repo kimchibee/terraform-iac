@@ -1,4 +1,4 @@
-# Linux Monitoring VM ??리프?�서�?apply (network state 참조)
+# Linux Monitoring VM leaf (applies using network remote state references)
 data "terraform_remote_state" "network" {
   backend = "azurerm"
   config = {

@@ -1,5 +1,5 @@
 # Spoke VNet 리프
-# ?�일 책임: Spoke Virtual Network ?�체�??�성
+# Single responsibility: provision Spoke Virtual Network only
 data "terraform_remote_state" "spoke_rg" {
   backend = "azurerm"
   config = {

@@ -1,6 +1,6 @@
 #--------------------------------------------------------------
-# Hub ??Monitoring-VM-Subnet (`hub-monitoring-vm-subnet`)
-# ?�일 책임: Monitoring-VM-Subnet 1�??�성
+# Hub Monitoring-VM-Subnet (`hub-monitoring-vm-subnet`)
+# Single responsibility: create one Monitoring-VM-Subnet
 #--------------------------------------------------------------
 data "terraform_remote_state" "vnet_hub" {
   backend = "azurerm"

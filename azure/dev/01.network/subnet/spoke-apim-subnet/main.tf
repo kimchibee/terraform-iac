@@ -1,6 +1,6 @@
 #--------------------------------------------------------------
-# Spoke ??apim-snet (`spoke-apim-subnet`)
-# ?�일 책임: apim-snet 1�??�성
+# Spoke apim-snet (`spoke-apim-subnet`)
+# Single responsibility: create one apim-snet subnet
 #--------------------------------------------------------------
 data "terraform_remote_state" "vnet_spoke" {
   backend = "azurerm"

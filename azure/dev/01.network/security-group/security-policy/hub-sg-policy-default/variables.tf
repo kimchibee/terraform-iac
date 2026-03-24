@@ -25,19 +25,19 @@ variable "backend_container_name" {
 }
 
 variable "deploy_azure_firewall" {
-  description = "false�?Firewall Policy�??�성 (방화�?VM/PIP ?�음)"
+  description = "If false, only firewall policy is created (no Azure Firewall/PIP resources)."
   type        = bool
   default     = true
 }
 
 variable "firewall_sku_tier" {
-  description = "Azure Firewall SKU tier (Standard 권장; Policy sku?� 맞출 �?"
+  description = "Azure Firewall SKU tier. Keep this aligned with the firewall policy SKU."
   type        = string
   default     = "Standard"
 }
 
 variable "firewall_zones" {
-  description = "가???�역 (리전???�라 null)"
+  description = "Optional availability zones. Set null if zones are not supported in region."
   type        = list(string)
   default     = null
 }

@@ -29,13 +29,13 @@ variable "backend_container_name" {
 }
 
 variable "ai_developer_group_object_id" {
-  description = "AI 개발??그룹 Object ID. 미설??????�� ?�당 ?�음."
+  description = "AI developer group object ID. Leave null to skip assignment."
   type        = string
   default     = null
 }
 
 variable "spoke_rg_role_definition_name" {
-  description = "Spoke RG ??��"
+  description = "Role definition name for the Spoke resource group."
   type        = string
   default     = "Reader"
 }

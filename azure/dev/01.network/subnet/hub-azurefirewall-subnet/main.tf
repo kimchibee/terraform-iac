@@ -1,6 +1,6 @@
 #--------------------------------------------------------------
-# Hub ??AzureFirewallSubnet (`hub-azurefirewall-subnet`)
-# ?�일 책임: AzureFirewallSubnet 1�??�성
+# Hub AzureFirewallSubnet (`hub-azurefirewall-subnet`)
+# Single responsibility: create one AzureFirewallSubnet
 #--------------------------------------------------------------
 data "terraform_remote_state" "vnet_hub" {
   backend = "azurerm"

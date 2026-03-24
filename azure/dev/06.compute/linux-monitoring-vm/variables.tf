@@ -1,5 +1,6 @@
 #--------------------------------------------------------------
-# Linux Monitoring VM 리프 ??변??(network remote_state�?RG/?�브??ASG ?�석)
+# Linux Monitoring VM leaf variables
+# (uses network remote state for Hub RG/subnet/ASG references)
 #--------------------------------------------------------------
 
 variable "project_name" {
@@ -41,12 +42,12 @@ variable "backend_container_name" {
 }
 
 variable "application_security_group_keys" {
-  description = "VM NIC??붙일 ASG ??(network state output ?�름�??�??"
+  description = "ASG keys to attach to the VM NIC (resolved from network state outputs)."
   type        = list(string)
   default     = ["keyvault_clients", "vm_allowed_clients"]
 }
 
-# ---- VM 기본�?(복제 ???�기�??�정) ----
+# ---- VM defaults (override in terraform.tfvars if needed) ----
 variable "vm_name_suffix" {
   type    = string
   default = "monitoring-vm"

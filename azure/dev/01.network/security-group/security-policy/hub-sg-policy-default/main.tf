@@ -1,7 +1,7 @@
 #--------------------------------------------------------------
-# Hub Azure Firewall Policy (+ ?�택: Azure Firewall)
-# ?�행: vnet/hub-vnet (AzureFirewallSubnet·?�일 Hub RG)
-# route ?�에??next hop ?�로 ?�려�?출력 hub_firewall_private_ip 참조
+# Hub Azure Firewall Policy (+ optional Azure Firewall)
+# Prerequisite: `vnet/hub-vnet` (AzureFirewallSubnet in same Hub RG)
+# Route leaves can reference `hub_firewall_private_ip` output as next hop
 #--------------------------------------------------------------
 data "terraform_remote_state" "vnet_hub" {
   backend = "azurerm"

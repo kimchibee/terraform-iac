@@ -17,19 +17,19 @@ variable "hub_subscription_id" {
 }
 
 variable "admin_group_object_id" {
-  description = "관리자 그룹 Object ID. 미설??????�� ?�당 ?�성 ????"
+  description = "Admin group object ID. Leave null to skip role assignment."
   type        = string
   default     = null
 }
 
 variable "admin_group_scope_id" {
-  description = "??�� 부??scope (ARM 리소??ID)"
+  description = "Scope ARM resource ID where the role assignment is created."
   type        = string
   default     = null
 }
 
 variable "role_definition_name" {
-  description = "부?�할 ??�� ?�름"
+  description = "Role definition name to assign."
   type        = string
   default     = "Contributor"
 }

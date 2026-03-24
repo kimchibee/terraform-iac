@@ -42,7 +42,7 @@ variable "use_securitygroup_prereq" {
   default     = false
 }
 
-# ?�나리오 3: keyvault-sg
+# Scenario 3: keyvault-sg integration
 variable "enable_keyvault_sg" {
   description = "Enable key-vault outbound NSG policy integration."
   type        = bool
@@ -72,7 +72,7 @@ variable "keyvault_clients_asg_name" {
   default = "keyvault-clients-asg"
 }
 
-# VM ?�근 ASG
+# VM access ASG integration
 variable "enable_vm_access_sg" {
   type    = bool
   default = false

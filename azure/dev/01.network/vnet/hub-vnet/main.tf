@@ -1,7 +1,7 @@
 #--------------------------------------------------------------
 # Hub VNet 리프
-# ?�일 책임: Hub Virtual Network ?�체�??�성
-# Subnet / DNS / Resolver / VPN / NSG / Rule / Association ?� 별도 리프?�서 관�?
+# Single responsibility: provision Hub Virtual Network only
+# Subnet/DNS/Resolver/VPN/NSG/Rule/Association are managed in separate leaves
 #--------------------------------------------------------------
 
 data "terraform_remote_state" "hub_rg" {

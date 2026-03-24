@@ -1,6 +1,6 @@
 #--------------------------------------------------------------
-# Spoke Azure Firewall Policy (+ ?�택: Azure Firewall)
-# ?�행: vnet/spoke-vnet (Spoke RG·?�브?? 방화�?VM?� firewall_subnet_key ?�브???�요)
+# Spoke Azure Firewall Policy (+ optional Azure Firewall)
+# Prerequisite: `vnet/spoke-vnet` (requires firewall subnet id when firewall is enabled)
 #--------------------------------------------------------------
 data "terraform_remote_state" "vnet_spoke" {
   backend = "azurerm"

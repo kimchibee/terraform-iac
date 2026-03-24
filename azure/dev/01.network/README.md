@@ -63,28 +63,13 @@
 - 기존 `securitygroup/hub/*` 와 `subnet/spoke-subnet-nsg` 는 legacy 구조로 보고 새 경로에서 더 이상 사용하지 않는다.
 - 상세는 각 리프 README를 참고한다.
 
-## Strict AVM Foundation 적용 범위
+## 모듈/리프 운영 기준
 
-Strict AVM-only 파동에서 `01.network`는 아래 리프만 in-scope로 본다.
+`01.network`는 `resource-group`, `vnet`, `security-group`, `subnet`, `dns`, `route` 리프를 분리해 운영합니다.
 
-- `resource-group/*` -> `terraform_modules/resource-group` (AVM-only)
-- `vnet/*` -> `terraform_modules/vnet` (AVM-only)
-- `application-security-group/*` -> `terraform_modules/application-security-group` (AVM-only)
-- `network-security-group/*` -> `terraform_modules/network-security-group` (AVM-only)
-- `route/*` -> `terraform_modules/route-table` (AVM-only)
-- `security-policy/*` -> `terraform_modules/firewall-policy` (AVM-only)
-
-아래 리프는 strict AVM-only 기준에서 Deferred다.
-
-- `subnet/*`
-- `private-dns-zone/*`
-- `private-dns-zone-vnet-link/*`
-- `dns-private-resolver/*`
-- `dns-private-resolver-inbound-endpoint/*`
-- `public-ip/*`
-- `virtual-network-gateway/*`
-- `network-security-rule/*`
-- `subnet-network-security-group-association/*`
+- 공용 모듈 참조: `terraform-modules`의 AVM wrapper 모듈 사용
+- 리프 간 의존성: `resource-group` -> `vnet` -> `subnet/security-group/dns/route`
+- apply는 각 리프 디렉터리에서 수행
 
 ## 현재 상태
 

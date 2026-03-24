@@ -1,7 +1,8 @@
 #--------------------------------------------------------------
-# Hub ??pep-snet (`hub-pep-subnet`)
-# ?�일 책임: pep-snet 1�??�성
-# 보안 규칙/?�결?� ?�용 NSG/ASG/rule/association 리프?�서 관�?#--------------------------------------------------------------
+# Hub pep-snet (`hub-pep-subnet`)
+# Single responsibility: create one pep-snet subnet
+# Security rules/associations are managed by separate NSG/ASG/rule leaves
+#--------------------------------------------------------------
 data "terraform_remote_state" "vnet_hub" {
   backend = "azurerm"
   config = {

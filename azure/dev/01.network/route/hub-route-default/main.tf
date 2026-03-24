@@ -1,5 +1,6 @@
-# Hub UDR ??Monitoring-VM-Subnet ???�택)??Route Table???�결?�고, Spoke ?�??��로의 ?�용???�의 경로�??????�음.
-# Route Table: 공동 모듈 route-table ??AVM avm-res-network-routetable
+# Hub UDR leaf: creates route table, optionally associates Monitoring-VM-Subnet,
+# and manages custom/auto routes for Spoke traffic.
+# Route table is provisioned via shared AVM wrapper module.
 data "terraform_remote_state" "vnet_hub" {
   backend = "azurerm"
   config = {

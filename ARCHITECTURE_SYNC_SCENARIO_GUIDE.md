@@ -213,3 +213,134 @@ terraform plan -var-file=terraform.tfvars
 - 예기치 않은 파일 변경이 감지되면 즉시 중단하고 보고한다.
 - 변경은 항상 스택 의존성 순서(01->09) 기준으로 수행한다.
 ```
+
+---
+
+## 10) AI 없이 수동으로 진행하는 복사-붙여넣기 런북 (Bash)
+
+아래는 AI 없이도 운영자가 그대로 실행할 수 있는 최소 절차입니다.
+
+### 10-1. 세션 초기화 및 변수 선언
+
+```bash
+# repo 루트로 이동
+cd "/c/Users/nonoc/OneDrive/바탕 화면/challenge/terraform-iac"
+
+# 환경 변수(본인 환경 값으로 변경)
+export HUB_SUBSCRIPTION_ID="<hub-subscription-id>"
+export SPOKE_SUBSCRIPTION_ID="<spoke-subscription-id>"
+export BACKEND_RG="terraform-state-rg"
+export BACKEND_SA="tfstate7dc60879"
+export BACKEND_CONTAINER="tfstate"
+```
+
+### 10-2. 현재 운영 리소스 인벤토리 수집
+
+```bash
+mkdir -p sync-artifacts
+
+az login
+az account set --subscription "$HUB_SUBSCRIPTION_ID"
+az resource list -o json > sync-artifacts/hub_resources.json
+
+az account set --subscription "$SPOKE_SUBSCRIPTION_ID"
+az resource list -o json > sync-artifacts/spoke_resources.json
+
+az graph query -q "Resources | summarize count() by type | order by type asc" -o table > sync-artifacts/resource_type_summary.txt
+```
+
+### 10-3. 백엔드 파일 생성/검증
+
+```bash
+# 스크립트가 있으면 실행
+if [ -f "./scripts/generate-backend-hcl.sh" ]; then
+  chmod +x ./scripts/generate-backend-hcl.sh
+  ./scripts/generate-backend-hcl.sh
+fi
+
+# 누락된 backend.hcl 확인
+find ./azure/dev -type f -name "main.tf" | while read -r f; do
+  d="$(dirname "$f")"
+  if [ ! -f "$d/backend.hcl" ]; then
+    echo "[MISSING backend.hcl] $d"
+  fi
+done
+```
+
+### 10-4. 스택 순서대로 init/plan 실행 및 로그 수집
+
+```bash
+mkdir -p sync-artifacts/plan-logs
+
+# 의존성 순서(리프는 디렉터리 탐색으로 수집)
+for stack in 01.network 02.storage 03.shared-services 04.apim 05.ai-services 06.compute 07.identity 08.rbac 09.connectivity; do
+  echo "===== STACK: $stack ====="
+  find "./azure/dev/$stack" -type f -name "main.tf" | while read -r tf; do
+    leaf="$(dirname "$tf")"
+    [ -f "$leaf/backend.hcl" ] || continue
+
+    echo "---- LEAF: $leaf ----"
+    (
+      cd "$leaf" || exit 1
+      terraform init -backend-config=backend.hcl -input=false
+      if [ -f terraform.tfvars ]; then
+        terraform plan -var-file=terraform.tfvars -input=false -no-color > "../../../sync-artifacts/plan-logs/$(echo "$leaf" | tr '/\\' '__').plan.txt" 2>&1
+      else
+        terraform plan -input=false -no-color > "../../../sync-artifacts/plan-logs/$(echo "$leaf" | tr '/\\' '__').plan.txt" 2>&1
+      fi
+    )
+  done
+done
+```
+
+### 10-5. plan 결과 자동 분류 (SYNC / PARTIAL / NOT_SYNC)
+
+```bash
+mkdir -p sync-artifacts/reports
+REPORT="sync-artifacts/reports/sync_status.tsv"
+echo -e "leaf\tstatus\treason" > "$REPORT"
+
+for p in sync-artifacts/plan-logs/*.plan.txt; do
+  leaf="$(basename "$p" .plan.txt)"
+  if rg -q "No changes\\.|0 to add, 0 to change, 0 to destroy" "$p"; then
+    echo -e "$leaf\tSYNC\tno drift" >> "$REPORT"
+  elif rg -q "Unsupported attribute|Error:|Resource already exists|Invalid index|Attribute redefined" "$p"; then
+    echo -e "$leaf\tNOT_SYNC\tplan error or reference mismatch" >> "$REPORT"
+  else
+    echo -e "$leaf\tPARTIAL\tdrift exists (review manually)" >> "$REPORT"
+  fi
+done
+
+column -t -s $'\t' "$REPORT"
+```
+
+### 10-6. 코드 정합화 후 import 수행 (필요 리소스만)
+
+```bash
+# 예시: 특정 리프에서 리소스 import
+cd "/c/Users/nonoc/OneDrive/바탕 화면/challenge/terraform-iac/azure/dev/05.ai-services/workload"
+terraform init -backend-config=backend.hcl -input=false
+
+# 주소/ID는 실제 plan 오류 메시지 기준으로 교체
+terraform import 'azurerm_machine_learning_workspace.this' '/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<name>'
+```
+
+중요:
+
+- import 전에 `main.tf`/`tfvars`가 실환경을 정확히 표현하도록 먼저 수정
+- 유지 대상 리소스만 import
+- 제외 대상은 코드에서 비활성화 또는 관리 경계 문서화
+
+### 10-7. 최종 싱크 재검증
+
+```bash
+# 동일 루프 재실행 후 리포트 재생성
+# 목표: NOT_SYNC 0건, PARTIAL 최소화
+```
+
+### 10-8. 전환 완료 체크리스트
+
+- 모든 리프 `terraform init` 성공
+- 주요 리프 `plan`이 SYNC
+- 운영 핵심 리소스에서 의도치 않은 replace 없음
+- 이후 신규 리소스는 Terraform 코드 변경으로만 생성
