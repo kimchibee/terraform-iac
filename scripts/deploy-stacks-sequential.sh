@@ -128,7 +128,7 @@ replace_if_key_exists() {
   local tmp
   tmp="$(mktemp)"
 
-  if rg -q "^[[:space:]]*${key}[[:space:]]*=" "$file"; then
+  if grep -Eq "^[[:space:]]*${key}[[:space:]]*=" "$file"; then
     awk -v key="$key" -v value="$value" '
       BEGIN { re = "^[[:space:]]*" key "[[:space:]]*=" }
       $0 ~ re { print key " = \"" value "\""; next }
@@ -196,7 +196,7 @@ build_generated_tfvars_if_missing() {
   add_if_var_declared() {
     local var_name="$1"
     local var_value="$2"
-    if rg -q "variable[[:space:]]+\"${var_name}\"" "$leaf_abs" --glob "*.tf"; then
+    if grep -Rqs --include="*.tf" "variable[[:space:]]\\+\"${var_name}\"" "$leaf_abs"; then
       printf "%s = \"%s\"\n" "$var_name" "$var_value" >> "$out"
       any=1
     fi
@@ -209,7 +209,7 @@ build_generated_tfvars_if_missing() {
   add_if_var_declared "backend_container_name" "$BACKEND_CONTAINER"
   add_if_var_declared "location" "$BACKEND_LOCATION"
 
-  if rg -q "variable[[:space:]]+\"tags\"" "$leaf_abs" --glob "*.tf"; then
+  if grep -Rqs --include="*.tf" "variable[[:space:]]\\+\"tags\"" "$leaf_abs"; then
     cat >> "$out" <<'EOF'
 tags = {
   Environment = "dev"
@@ -416,7 +416,7 @@ EOF
     )"
 
     echo "$message" >> "$test_log"
-    if rg -q "HTTP:200" <<< "$message"; then
+    if grep -q "HTTP:200" <<< "$message"; then
       result="success"
     else
       result="failed"
