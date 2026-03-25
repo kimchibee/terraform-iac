@@ -4,7 +4,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.75.0"
+      version = ">= 3.116.0, < 5.0.0"
     }
   }
 }
@@ -22,8 +22,15 @@ variable "backend_container_name" {
   type    = string
   default = "tfstate"
 }
-variable "vpn_gateway_sku" { type = string default = "VpnGw1" }
-variable "vpn_gateway_type" { type = string default = "Vpn" }
+variable "vpn_gateway_sku" {
+  type    = string
+  default = "VpnGw1"
+}
+
+variable "vpn_gateway_type" {
+  type    = string
+  default = "Vpn"
+}
 
 provider "azurerm" {
   features {}

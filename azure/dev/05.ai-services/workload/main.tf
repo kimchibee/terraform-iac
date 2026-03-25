@@ -74,33 +74,10 @@ locals {
     24
   )
   ai_foundry_workspace_name = "${local.spoke_ai_foundry_name}-${random_string.ai_foundry_suffix.result}"
-  openai_endpoint_host      = trimsuffix(trimprefix(module.openai.endpoint, "https://"), "/")
-  openai_private_dns_record = trimsuffix(local.openai_endpoint_host, ".openai.azure.com")
-  openai_pe_private_ip      = try(data.azapi_resource.openai_pe[0].output.properties.customDnsConfigs[0].ipAddresses[0], null)
-  ai_foundry_pe_custom_dns  = try(data.azapi_resource.ai_foundry_pe[0].output.properties.customDnsConfigs, [])
-
-  # Map AI Foundry PE FQDNs to corresponding Hub private DNS zones.
-  ai_foundry_dns_records = [
-    for cfg in local.ai_foundry_pe_custom_dns : {
-      fqdn = lower(try(cfg.fqdn, ""))
-      ip   = try(cfg.ipAddresses[0], null)
-      zone = endswith(lower(try(cfg.fqdn, "")), ".api.azureml.ms") ? data.azurerm_private_dns_zone.hub_azureml_api.name : (
-        endswith(lower(try(cfg.fqdn, "")), ".notebooks.azure.net") ? data.azurerm_private_dns_zone.hub_notebooks.name : null
-      )
-      record_name = endswith(lower(try(cfg.fqdn, "")), ".api.azureml.ms") ? trimsuffix(lower(cfg.fqdn), ".api.azureml.ms") : (
-        endswith(lower(try(cfg.fqdn, "")), ".notebooks.azure.net") ? trimsuffix(lower(cfg.fqdn), ".notebooks.azure.net") : null
-      )
-    } if try(cfg.fqdn, null) != null && try(cfg.ipAddresses[0], null) != null
-  ]
-
-  ai_foundry_dns_records_map = {
-    for r in local.ai_foundry_dns_records : "${r.zone}::${r.record_name}" => r
-    if r.zone != null && r.record_name != null
-  }
 }
 
 module "openai" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/cognitive-services-account?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "./modules/cognitive-services-account"
 
   providers = {
     azurerm = azurerm.spoke
@@ -112,6 +89,7 @@ module "openai" {
   kind                  = "OpenAI"
   sku_name              = var.openai_sku
   cognitive_deployments = local.openai_deployments_map
+  public_network_access_enabled = false
   tags                  = var.tags
 }
 
@@ -193,50 +171,8 @@ module "openai_private_endpoint" {
   subnet_id            = data.terraform_remote_state.spoke_pep_subnet.outputs.spoke_subnet_id
   target_resource_id   = module.openai.id
   subresource_names    = ["account"]
-  private_dns_zone_ids = []
+  private_dns_zone_ids = [data.azurerm_private_dns_zone.hub_openai.id]
   tags                 = var.tags
-}
-
-data "azapi_resource" "openai_pe" {
-  count = var.enable_private_endpoints ? 1 : 0
-
-  type      = "Microsoft.Network/privateEndpoints@2024-07-01"
-  parent_id = data.azurerm_resource_group.spoke.id
-  name      = "${local.name_prefix}-aoai-pe"
-
-  response_export_values = ["properties.customDnsConfigs"]
-}
-
-data "azapi_resource" "ai_foundry_pe" {
-  count = var.enable_private_endpoints && var.enable_ai_foundry_workspace ? 1 : 0
-
-  type      = "Microsoft.Network/privateEndpoints@2024-07-01"
-  parent_id = data.azurerm_resource_group.spoke.id
-  name      = "${local.name_prefix}-aif-pe"
-
-  response_export_values = ["properties.customDnsConfigs"]
-}
-
-resource "azurerm_private_dns_a_record" "openai_in_hub_zone" {
-  count = var.enable_private_endpoints && local.openai_pe_private_ip != null ? 1 : 0
-
-  provider            = azurerm.hub
-  name                = local.openai_private_dns_record
-  zone_name           = data.azurerm_private_dns_zone.hub_openai.name
-  resource_group_name = data.azurerm_private_dns_zone.hub_openai.resource_group_name
-  ttl                 = 300
-  records             = [local.openai_pe_private_ip]
-}
-
-resource "azurerm_private_dns_a_record" "ai_foundry_in_hub_zone" {
-  for_each = local.ai_foundry_dns_records_map
-
-  provider            = azurerm.hub
-  name                = each.value.record_name
-  zone_name           = each.value.zone
-  resource_group_name = data.terraform_remote_state.network_hub.outputs.hub_resource_group_name
-  ttl                 = 300
-  records             = [each.value.ip]
 }
 
 module "ai_foundry_private_endpoint" {
@@ -255,6 +191,9 @@ module "ai_foundry_private_endpoint" {
   subnet_id            = data.terraform_remote_state.spoke_pep_subnet.outputs.spoke_subnet_id
   target_resource_id   = azurerm_machine_learning_workspace.ai_foundry[0].id
   subresource_names    = ["amlworkspace"]
-  private_dns_zone_ids = []
+  private_dns_zone_ids = [
+    data.azurerm_private_dns_zone.hub_azureml_api.id,
+    data.azurerm_private_dns_zone.hub_notebooks.id
+  ]
   tags                 = var.tags
 }

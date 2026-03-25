@@ -408,7 +408,7 @@ test_monitoring_vm_openai() {
   aoai_host="${aoai_host%/}"
 
   az account set --subscription "$SPOKE_SUBSCRIPTION_ID" >/dev/null
-  api_key="$(az cognitiveservices account keys list -g "$spoke_rg" -n "$aoai_name" --query key1 -o tsv)"
+  api_key="$(az cognitiveservices account keys list -g "$spoke_rg" -n "$aoai_name" --query key1 -o tsv 2>/dev/null || true)"
 
   if [[ -z "$api_key" ]]; then
     echo "SKIP: OpenAI API 키 조회 실패로 GPT 호출 테스트를 건너뜁니다." | tee -a "$test_log"
