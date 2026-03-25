@@ -180,6 +180,54 @@ terraform-iac/
 - **Backend Storage 이름**: `bootstrap/backend/terraform.tfvars`의 `storage_account_name`은 **Azure 전역 유일**(소문자·숫자 3~24자, 하이픈 불가)이어야 하므로, 다른 사용자와 겹치지 않게 수정합니다.
 - **각 스택 terraform.tfvars**: network 이후 스택은 **Bootstrap 출력값**을 변수로 넣어야 합니다. `backend_resource_group_name`, `backend_storage_account_name`, `backend_container_name`을 Bootstrap의 `terraform.tfvars`(또는 `terraform output`)와 동일하게 맞추세요. 예시는 각 스택의 `terraform.tfvars.example`에 있습니다.
 
+### 3.0.0 구독 ID 입력 대상 tfvars 경로
+
+- 자동화용 JSON 목록: `scripts/subscription-tfvars-paths.json`
+- Bootstrap 기준값 파일: `bootstrap/backend/terraform.tfvars`
+
+```text
+azure/dev/01.network/resource-group/hub-rg/terraform.tfvars
+azure/dev/01.network/resource-group/spoke-rg/terraform.tfvars
+azure/dev/01.network/vnet/hub-vnet/terraform.tfvars
+azure/dev/01.network/vnet/spoke-vnet/terraform.tfvars
+azure/dev/01.network/subnet/hub-appgateway-subnet/terraform.tfvars
+azure/dev/01.network/subnet/hub-azurefirewall-management-subnet/terraform.tfvars
+azure/dev/01.network/subnet/hub-azurefirewall-subnet/terraform.tfvars
+azure/dev/01.network/subnet/hub-dnsresolver-inbound-subnet/terraform.tfvars
+azure/dev/01.network/subnet/hub-gateway-subnet/terraform.tfvars
+azure/dev/01.network/subnet/hub-monitoring-vm-subnet/terraform.tfvars
+azure/dev/01.network/subnet/hub-pep-subnet/terraform.tfvars
+azure/dev/01.network/subnet/spoke-apim-subnet/terraform.tfvars
+azure/dev/01.network/subnet/spoke-pep-subnet/terraform.tfvars
+azure/dev/01.network/dns/private-dns-zone/hub-blob/terraform.tfvars
+azure/dev/01.network/route/hub-route-default/terraform.tfvars
+azure/dev/01.network/route/spoke-route-default/terraform.tfvars
+azure/dev/01.network/security-group/application-security-group/keyvault-clients/terraform.tfvars
+azure/dev/01.network/security-group/application-security-group/vm-allowed-clients/terraform.tfvars
+azure/dev/01.network/security-group/network-security-group/hub-monitoring-vm/terraform.tfvars
+azure/dev/01.network/security-group/network-security-group/hub-pep/terraform.tfvars
+azure/dev/01.network/security-group/network-security-group/keyvault-standalone/terraform.tfvars
+azure/dev/01.network/security-group/network-security-group/spoke-pep/terraform.tfvars
+azure/dev/01.network/security-group/security-policy/hub-sg-policy-default/terraform.tfvars
+azure/dev/01.network/security-group/security-policy/spoke-sg-policy-default/terraform.tfvars
+azure/dev/02.storage/monitoring/terraform.tfvars
+azure/dev/03.shared-services/log-analytics/terraform.tfvars
+azure/dev/03.shared-services/shared/terraform.tfvars
+azure/dev/04.apim/workload/terraform.tfvars
+azure/dev/05.ai-services/workload/terraform.tfvars
+azure/dev/06.compute/linux-monitoring-vm/terraform.tfvars
+azure/dev/06.compute/windows-example/terraform.tfvars
+azure/dev/08.rbac/authorization/hub-assignments/terraform.tfvars
+azure/dev/08.rbac/authorization/spoke-assignments/terraform.tfvars
+azure/dev/08.rbac/group/admin-hub-scope/terraform.tfvars
+azure/dev/08.rbac/group/ai-developer-spoke-scope/terraform.tfvars
+azure/dev/08.rbac/principal/hub-assignments/terraform.tfvars
+azure/dev/08.rbac/principal/spoke-assignments/terraform.tfvars
+azure/dev/09.connectivity/diagnostics/hub/terraform.tfvars
+azure/dev/09.connectivity/peering/hub-to-spoke/terraform.tfvars
+azure/dev/09.connectivity/peering/spoke-to-hub/terraform.tfvars
+```
+
 ### 3.0.1 구독 2개로 운영할 때 (Hub / Spoke 분리)
 
 아키텍처상 **Hub 구독**과 **Spoke 구독**을 나누어 배포하려면 아래 순서로 진행하면 됩니다.
@@ -276,6 +324,16 @@ container_name       = "<BACKEND_CONTAINER>"
 key                  = "azure/dev/<leaf-path>/terraform.tfstate"
 ```
 
+#### Step C-1. 전체 스택 자동 배포 스크립트 (선택)
+
+아래 스크립트는 구독 ID 입력을 받아 `terraform.tfvars`를 일괄 갱신하고, `01.network`부터 `09.connectivity`까지 순차 배포합니다.
+로그는 `scripts/logs/deploy-<timestamp>/`에 저장되며 터미널에도 동시에 출력됩니다.
+
+```bash
+cd "<repo-root>"
+bash ./scripts/deploy-stacks-sequential.sh
+```
+
 #### Step D. Provider 등록 (Hub/Spoke 각각 실행)
 
 ```powershell
@@ -287,7 +345,9 @@ $namespaces = @(
   "Microsoft.Network",
   "Microsoft.Storage",
   "Microsoft.KeyVault",
-  "Microsoft.Compute"
+  "Microsoft.Compute",
+  "Microsoft.CognitiveServices",
+  "Microsoft.MachineLearningServices"
 )
 
 foreach ($sub in @($HUB_SUBSCRIPTION_ID, $SPOKE_SUBSCRIPTION_ID)) {
@@ -387,6 +447,8 @@ az provider register --namespace Microsoft.Network
 az provider register --namespace Microsoft.Storage
 az provider register --namespace Microsoft.KeyVault
 az provider register --namespace Microsoft.Compute
+az provider register --namespace Microsoft.CognitiveServices
+az provider register --namespace Microsoft.MachineLearningServices
 ```
 
 **등록 완료 확인** (Registered 나올 때까지 대기):
@@ -479,6 +541,7 @@ key                  = "azure/dev/<leaf-path>/terraform.tfstate"
 ### 3.3 AI 모델 지정 방법 가이드 (ai-services 스택)
 
 - **Azure OpenAI 모델 배포**는 리전별 **쿼터**가 필요합니다. 쿼터 없으면 `InsufficientQuota` 오류가 발생합니다.
+- 일부 모델은 구독/리전 조합에 따라 **추가 기능 승인(feature enablement)** 이 필요할 수 있습니다. `SpecialFeatureOrQuotaIdRequired` 오류가 나오면 Azure 지원 경로로 해당 모델 feature 활성화 요청을 진행하세요.
 - **쿼터 승인 전**: `azure/dev/05.ai-services/workload/terraform.tfvars`에서 `openai_deployments = []` 로 두고 배포하면 **모델 배포 없이** AI Foundry, Private Endpoints 등만 생성됩니다.
 - **쿼터 승인 후** 모델을 배포하려면:
 
