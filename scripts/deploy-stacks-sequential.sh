@@ -149,7 +149,9 @@ collect_leaf_dirs() {
   find "$stack_dir" \
     -type d \( -name ".terraform" -o -name ".git" \) -prune -o \
     -type f -name "main.tf" -print0 | while IFS= read -r -d '' f; do
-    dirname "$f"
+    local d
+    d="$(dirname "$f")"
+    [[ -f "$d/backend.tf" ]] && echo "$d"
   done | sort -u
 }
 
@@ -171,10 +173,55 @@ EOF
     find "$REPO_ROOT/azure/dev" \
       -type d \( -name ".terraform" -o -name ".git" \) -prune -o \
       -type f -name "main.tf" -print0 | while IFS= read -r -d '' f; do
-      dirname "$f"
+      local d
+      d="$(dirname "$f")"
+      [[ -f "$d/backend.tf" ]] && echo "$d"
     done | sort -u
   )
   echo "[완료] backend.hcl 자동 보정 생성: ${created}개"
+}
+
+build_generated_tfvars_if_missing() {
+  local leaf_abs="$1"
+  local out="$leaf_abs/terraform.generated.auto.tfvars"
+  local any=0
+
+  if [[ -f "$leaf_abs/terraform.tfvars" ]]; then
+    rm -f "$out"
+    return
+  fi
+
+  : > "$out"
+
+  add_if_var_declared() {
+    local var_name="$1"
+    local var_value="$2"
+    if rg -q "variable[[:space:]]+\"${var_name}\"" "$leaf_abs" --glob "*.tf"; then
+      printf "%s = \"%s\"\n" "$var_name" "$var_value" >> "$out"
+      any=1
+    fi
+  }
+
+  add_if_var_declared "hub_subscription_id" "$HUB_SUBSCRIPTION_ID"
+  add_if_var_declared "spoke_subscription_id" "$SPOKE_SUBSCRIPTION_ID"
+  add_if_var_declared "backend_resource_group_name" "$BACKEND_RG"
+  add_if_var_declared "backend_storage_account_name" "$BACKEND_SA"
+  add_if_var_declared "backend_container_name" "$BACKEND_CONTAINER"
+  add_if_var_declared "location" "$BACKEND_LOCATION"
+
+  if rg -q "variable[[:space:]]+\"tags\"" "$leaf_abs" --glob "*.tf"; then
+    cat >> "$out" <<'EOF'
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+}
+EOF
+    any=1
+  fi
+
+  if [[ "$any" -ne 1 ]]; then
+    rm -f "$out"
+  fi
 }
 
 collect_leaf_dirs_ordered() {
@@ -254,6 +301,8 @@ apply_leaf() {
 
   (
     cd "$leaf_abs"
+    build_generated_tfvars_if_missing "$leaf_abs"
+
     local init_ok=0
     local init_attempt
     for init_attempt in 1 2 3; do
@@ -272,6 +321,8 @@ apply_leaf() {
 
     if [[ -f "terraform.tfvars" ]]; then
       terraform apply -auto-approve -var-file=terraform.tfvars -input=false
+    elif [[ -f "terraform.generated.auto.tfvars" ]]; then
+      terraform apply -auto-approve -var-file=terraform.generated.auto.tfvars -input=false
     else
       terraform apply -auto-approve -input=false
     fi
