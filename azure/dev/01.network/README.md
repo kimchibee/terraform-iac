@@ -63,6 +63,17 @@
 - 기존 `securitygroup/hub/*` 와 `subnet/spoke-subnet-nsg` 는 legacy 구조로 보고 새 경로에서 더 이상 사용하지 않는다.
 - 상세는 각 리프 README를 참고한다.
 
+## 가이드 링크 (Bash runbook)
+
+- DNS: `azure/dev/01.network/dns/README.md`
+- Public IP: `azure/dev/01.network/public-ip/README.md`
+- Resource Group: `azure/dev/01.network/resource-group/README.md`
+- Route: `azure/dev/01.network/route/README.md`
+- Security Group: `azure/dev/01.network/security-group/README.md`
+- Subnet: `azure/dev/01.network/subnet/README.md`
+- Virtual Network Gateway: `azure/dev/01.network/virtual-network-gateway/README.md`
+- VNet: `azure/dev/01.network/vnet/README.md`
+
 ## 모듈/리프 운영 기준
 
 `01.network`는 `resource-group`, `vnet`, `security-group`, `subnet`, `dns`, `route` 리프를 분리해 운영합니다.
