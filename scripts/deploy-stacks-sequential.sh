@@ -75,6 +75,12 @@ REQUIRED_PROVIDERS=(
   "Microsoft.MachineLearningServices"
 )
 
+REQUIRED_HUB_DNS_ZONES=(
+  "privatelink.openai.azure.com"
+  "privatelink.api.azureml.ms"
+  "privatelink.notebooks.azure.net"
+)
+
 mkdir -p "$RUN_LOG_DIR"
 
 print_guide() {
@@ -204,6 +210,8 @@ build_generated_tfvars_if_missing() {
 
   add_if_var_declared "hub_subscription_id" "$HUB_SUBSCRIPTION_ID"
   add_if_var_declared "spoke_subscription_id" "$SPOKE_SUBSCRIPTION_ID"
+  add_if_var_declared "project_name" "$PROJECT_NAME"
+  add_if_var_declared "name_prefix" "$NAME_PREFIX"
   add_if_var_declared "backend_resource_group_name" "$BACKEND_RG"
   add_if_var_declared "backend_storage_account_name" "$BACKEND_SA"
   add_if_var_declared "backend_container_name" "$BACKEND_CONTAINER"
@@ -214,6 +222,30 @@ build_generated_tfvars_if_missing() {
 tags = {
   Environment = "dev"
   ManagedBy   = "Terraform"
+}
+
+ensure_required_hub_dns_zones() {
+  local rg_name
+  rg_name="$(
+    az account set --subscription "$HUB_SUBSCRIPTION_ID" >/dev/null
+    az group exists --name "test-x-x-rg" | tr -d '\r'
+  )"
+
+  if [[ "$rg_name" != "true" ]]; then
+    echo "[안내] Hub RG(test-x-x-rg) 미존재로 Hub DNS zone 사전생성을 건너뜁니다."
+    return 0
+  fi
+
+  echo "[보정] Hub Private DNS zone 필수 항목 확인/생성..."
+  local zone
+  for zone in "${REQUIRED_HUB_DNS_ZONES[@]}"; do
+    if ! az network private-dns zone show -g "test-x-x-rg" -n "$zone" >/dev/null 2>&1; then
+      echo "  - 생성: $zone"
+      az network private-dns zone create -g "test-x-x-rg" -n "$zone" >/dev/null
+    else
+      echo "  - 존재: $zone"
+    fi
+  done
 }
 EOF
     any=1
@@ -444,6 +476,15 @@ BACKEND_RG="$(get_tfvar_value "resource_group_name" "$BOOTSTRAP_TFVARS")"
 BACKEND_SA="$(get_tfvar_value "storage_account_name" "$BOOTSTRAP_TFVARS")"
 BACKEND_CONTAINER="$(get_tfvar_value "container_name" "$BOOTSTRAP_TFVARS")"
 BACKEND_LOCATION="$(get_tfvar_value "location" "$BOOTSTRAP_TFVARS")"
+PROJECT_NAME="$(get_tfvar_value "project_name" "$REPO_ROOT/azure/dev/01.network/resource-group/hub-rg/terraform.tfvars")"
+NAME_PREFIX="$(get_tfvar_value "name_prefix" "$REPO_ROOT/azure/dev/03.shared-services/log-analytics/terraform.tfvars")"
+
+if [[ -z "$PROJECT_NAME" ]]; then
+  PROJECT_NAME="test"
+fi
+if [[ -z "$NAME_PREFIX" ]]; then
+  NAME_PREFIX="${PROJECT_NAME}-x-x"
+fi
 
 if [[ -z "$BACKEND_RG" || -z "$BACKEND_SA" || -z "$BACKEND_CONTAINER" ]]; then
   echo "ERROR: bootstrap/backend/terraform.tfvars 에서 backend 값(resource_group_name/storage_account_name/container_name)을 읽지 못했습니다."
@@ -507,6 +548,10 @@ for stack in "${STACK_ORDER[@]}"; do
     fi
     apply_leaf "$stack" "$leaf"
   done < <(collect_leaf_dirs_ordered "$stack")
+
+  if [[ "$stack" == "01.network" ]]; then
+    ensure_required_hub_dns_zones
+  fi
 done
 
 echo
