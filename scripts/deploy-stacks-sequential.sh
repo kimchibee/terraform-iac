@@ -146,9 +146,35 @@ collect_leaf_dirs() {
   if [[ ! -d "$stack_dir" ]]; then
     return
   fi
-  find "$stack_dir" -type f -name "main.tf" -print0 | while IFS= read -r -d '' f; do
+  find "$stack_dir" \
+    -type d \( -name ".terraform" -o -name ".git" \) -prune -o \
+    -type f -name "main.tf" -print0 | while IFS= read -r -d '' f; do
     dirname "$f"
   done | sort -u
+}
+
+ensure_backend_hcl_for_leaves() {
+  local created=0
+  local leaf
+  while IFS= read -r leaf; do
+    [[ -z "$leaf" ]] && continue
+    if [[ ! -f "$leaf/backend.hcl" ]]; then
+      cat > "$leaf/backend.hcl" <<EOF
+resource_group_name  = "$BACKEND_RG"
+storage_account_name = "$BACKEND_SA"
+container_name       = "$BACKEND_CONTAINER"
+key                  = "${leaf#$REPO_ROOT/}/terraform.tfstate"
+EOF
+      created=$((created + 1))
+    fi
+  done < <(
+    find "$REPO_ROOT/azure/dev" \
+      -type d \( -name ".terraform" -o -name ".git" \) -prune -o \
+      -type f -name "main.tf" -print0 | while IFS= read -r -d '' f; do
+      dirname "$f"
+    done | sort -u
+  )
+  echo "[완료] backend.hcl 자동 보정 생성: ${created}개"
 }
 
 collect_leaf_dirs_ordered() {
@@ -405,6 +431,7 @@ if [[ -f "$SCRIPT_DIR/generate-backend-hcl.sh" ]]; then
 else
   echo "WARN: scripts/generate-backend-hcl.sh 파일이 없어 backend.hcl 자동 생성을 건너뜁니다."
 fi
+ensure_backend_hcl_for_leaves
 
 echo
 echo "[4/5] 스택 순차 배포 시작..."
