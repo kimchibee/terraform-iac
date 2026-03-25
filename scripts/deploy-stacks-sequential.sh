@@ -10,6 +10,7 @@
 # -----------------------------------------------------------------------------
 
 set -euo pipefail
+export TF_IN_AUTOMATION=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -30,6 +31,35 @@ STACK_ORDER=(
   "07.identity"
   "08.rbac"
   "09.connectivity"
+)
+
+NETWORK_LEAF_ORDER=(
+  "resource-group/hub-rg"
+  "resource-group/spoke-rg"
+  "vnet/hub-vnet"
+  "vnet/spoke-vnet"
+  "subnet/hub-gateway-subnet"
+  "subnet/hub-dnsresolver-inbound-subnet"
+  "subnet/hub-azurefirewall-subnet"
+  "subnet/hub-azurefirewall-management-subnet"
+  "subnet/hub-appgateway-subnet"
+  "security-group/application-security-group/keyvault-clients"
+  "security-group/application-security-group/vm-allowed-clients"
+  "security-group/network-security-group/keyvault-standalone"
+  "security-group/network-security-group/hub-pep"
+  "security-group/network-security-group/hub-monitoring-vm"
+  "security-group/network-security-group/spoke-pep"
+  "subnet/hub-monitoring-vm-subnet"
+  "subnet/hub-pep-subnet"
+  "subnet/spoke-apim-subnet"
+  "subnet/spoke-pep-subnet"
+  "security-group/security-policy/hub-sg-policy-default"
+  "security-group/security-policy/spoke-sg-policy-default"
+  "route/hub-route-default"
+  "route/spoke-route-default"
+  "dns/private-dns-zone/hub-blob"
+  "public-ip/hub-vpn-gateway"
+  "virtual-network-gateway/hub-vpn-gateway"
 )
 
 REQUIRED_PROVIDERS=(
@@ -121,6 +151,39 @@ collect_leaf_dirs() {
   done | sort -u
 }
 
+collect_leaf_dirs_ordered() {
+  local stack="$1"
+  local stack_dir="$REPO_ROOT/azure/dev/$stack"
+  local leaf
+
+  if [[ "$stack" != "01.network" ]]; then
+    collect_leaf_dirs "$stack"
+    return
+  fi
+
+  for leaf in "${NETWORK_LEAF_ORDER[@]}"; do
+    local abs="$stack_dir/$leaf"
+    if [[ -f "$abs/main.tf" ]]; then
+      echo "$abs"
+    fi
+  done
+
+  # NETWORK_LEAF_ORDER에 없는 리프가 생기면 뒤에 자동 추가
+  collect_leaf_dirs "$stack" | while IFS= read -r extra; do
+    [[ -z "$extra" ]] && continue
+    local rel="${extra#$stack_dir/}"
+    local listed=0
+    local item
+    for item in "${NETWORK_LEAF_ORDER[@]}"; do
+      if [[ "$rel" == "$item" ]]; then
+        listed=1
+        break
+      fi
+    done
+    [[ "$listed" -eq 0 ]] && echo "$extra"
+  done
+}
+
 ensure_required_providers() {
   local subscription_id="$1"
   local pending=0
@@ -160,9 +223,27 @@ apply_leaf() {
   echo "===== [STACK: $stack] [LEAF: $leaf_rel] ====="
   echo "log: $log_file"
 
+  # backend는 Hub 구독에 있으므로 init/apply 전에 항상 Hub 구독으로 고정
+  az account set --subscription "$HUB_SUBSCRIPTION_ID" >/dev/null
+
   (
     cd "$leaf_abs"
-    terraform init -backend-config=backend.hcl -input=false
+    local init_ok=0
+    local init_attempt
+    for init_attempt in 1 2 3; do
+      if terraform init -upgrade -backend-config=backend.hcl -input=false; then
+        init_ok=1
+        break
+      fi
+      echo "WARN: terraform init 실패(시도 ${init_attempt}/3), 5초 후 재시도..."
+      sleep 5
+    done
+
+    if [[ "$init_ok" -ne 1 ]]; then
+      echo "ERROR: terraform init 재시도 후에도 실패"
+      exit 1
+    fi
+
     if [[ -f "terraform.tfvars" ]]; then
       terraform apply -auto-approve -var-file=terraform.tfvars -input=false
     else
@@ -292,11 +373,16 @@ if [[ -z "$BACKEND_RG" || -z "$BACKEND_SA" || -z "$BACKEND_CONTAINER" ]]; then
   exit 1
 fi
 
+SKIP_OPTIONAL_VPN_LEAVES="${SKIP_OPTIONAL_VPN_LEAVES:-true}"
+
 echo
 echo "[1/5] Hub/Spoke 구독 Provider 등록/점검 시작..."
 ensure_required_providers "$HUB_SUBSCRIPTION_ID"
 ensure_required_providers "$SPOKE_SUBSCRIPTION_ID"
 echo "[완료] Provider 등록/점검 완료"
+
+# 이후 terraform backend 접근이 안정적이도록 Hub 구독으로 복귀
+az account set --subscription "$HUB_SUBSCRIPTION_ID" >/dev/null
 
 echo
 echo "[2/5] tfvars 값 동기화 시작..."
@@ -327,13 +413,22 @@ for stack in "${STACK_ORDER[@]}"; do
   echo "########## DEPLOY STACK: $stack ##########"
   while IFS= read -r leaf; do
     [[ -z "$leaf" ]] && continue
+    if [[ "$SKIP_OPTIONAL_VPN_LEAVES" == "true" ]]; then
+      case "${leaf#$REPO_ROOT/}" in
+        azure/dev/01.network/public-ip/hub-vpn-gateway|azure/dev/01.network/virtual-network-gateway/hub-vpn-gateway)
+          printf "%s\t%s\t%s\t%s\n" "$stack" "${leaf#$REPO_ROOT/}" "skipped(optional-vpn)" "-" >> "$SUMMARY_TSV"
+          echo "SKIP (optional-vpn): ${leaf#$REPO_ROOT/}"
+          continue
+          ;;
+      esac
+    fi
     if [[ ! -f "$leaf/backend.hcl" ]]; then
       printf "%s\t%s\t%s\t%s\n" "$stack" "${leaf#$REPO_ROOT/}" "skipped(no-backend.hcl)" "-" >> "$SUMMARY_TSV"
       echo "SKIP (backend.hcl 없음): ${leaf#$REPO_ROOT/}"
       continue
     fi
     apply_leaf "$stack" "$leaf"
-  done < <(collect_leaf_dirs "$stack")
+  done < <(collect_leaf_dirs_ordered "$stack")
 done
 
 echo
