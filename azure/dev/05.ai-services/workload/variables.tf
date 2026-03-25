@@ -30,6 +30,11 @@ variable "spoke_subscription_id" {
   type        = string
 }
 
+variable "hub_subscription_id" {
+  description = "Hub subscription ID (used for private DNS zone record management)"
+  type        = string
+}
+
 # Spoke-workloads: network/connectivity에서 이미 생성하는 리소스는 생성하지 않음
 variable "enable_spoke_to_hub_peering" {
   description = "Spoke→Hub VNet Peering 생성 여부 (connectivity 스택에서 관리 시 false)"
@@ -80,6 +85,7 @@ variable "openai_deployments" {
     model_name = string
     version    = string
     capacity   = number
+    scale_type = optional(string, "Standard")
   }))
   default = []
 }

@@ -14,6 +14,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    azapi = {
+      source  = "azure/azapi"
+      version = "~> 2.9"
+    }
   }
 }
 
@@ -38,4 +42,16 @@ provider "azurerm" {
   features {}
   subscription_id            = var.spoke_subscription_id
   skip_provider_registration = true
+}
+
+provider "azapi" {
+  subscription_id = var.spoke_subscription_id
+}
+
+# Hub provider (for private DNS zone records)
+provider "azurerm" {
+  features {}
+  subscription_id            = var.hub_subscription_id
+  skip_provider_registration = true
+  alias                      = "hub"
 }

@@ -1,0 +1,7 @@
+﻿leaf,init,plan,apply,retry,note
+azure/dev/02.storage/monitoring,ok,ok,fail,none,apply_failed_nonimport
+azure/dev/06.compute/linux-monitoring-vm,ok,ok,ok,none,applied
+azure/dev/06.compute/windows-example,ok,ok,ok,none,applied
+azure/dev/08.rbac/principal/hub-assignments,ok,ok,ok,none,applied
+azure/dev/09.connectivity/diagnostics/hub,ok,fail,skip,none,plan_failed
+azure/dev/09.connectivity/peering/spoke-to-hub,ok,ok,ok,none,applied

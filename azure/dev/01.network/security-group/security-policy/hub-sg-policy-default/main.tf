@@ -77,3 +77,28 @@ resource "azurerm_firewall" "hub" {
     public_ip_address_id = azurerm_public_ip.firewall[0].id
   }
 }
+
+resource "azurerm_firewall_policy_rule_collection_group" "openai_egress" {
+  count = var.enable_openai_egress_rule ? 1 : 0
+
+  name               = "openai-egress-rcg"
+  firewall_policy_id = module.firewall_policy.resource_id
+  priority           = 200
+
+  application_rule_collection {
+    name     = "allow-openai-https"
+    priority = 210
+    action   = "Allow"
+
+    rule {
+      name              = "monitoring-to-openai"
+      source_addresses  = var.monitoring_subnet_cidrs
+      destination_fqdns = var.openai_destination_fqdns
+
+      protocols {
+        type = "Https"
+        port = 443
+      }
+    }
+  }
+}

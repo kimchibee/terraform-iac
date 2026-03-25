@@ -46,3 +46,21 @@ variable "firewall_public_ip_zones" {
   type    = list(string)
   default = null
 }
+
+variable "enable_openai_egress_rule" {
+  description = "Create firewall policy rule to allow monitoring subnet egress to Azure OpenAI over HTTPS."
+  type        = bool
+  default     = true
+}
+
+variable "monitoring_subnet_cidrs" {
+  description = "Source CIDRs for monitoring VM subnet."
+  type        = list(string)
+  default     = ["10.0.1.0/24"]
+}
+
+variable "openai_destination_fqdns" {
+  description = "Destination FQDN patterns for Azure OpenAI calls through firewall."
+  type        = list(string)
+  default     = ["*.openai.azure.com"]
+}

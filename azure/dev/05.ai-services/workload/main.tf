@@ -18,8 +18,36 @@ data "terraform_remote_state" "spoke_pep_subnet" {
   }
 }
 
+data "terraform_remote_state" "network_hub" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = var.backend_resource_group_name
+    storage_account_name = var.backend_storage_account_name
+    container_name       = var.backend_container_name
+    key                  = "azure/dev/01.network/vnet/hub-vnet/terraform.tfstate"
+  }
+}
+
 data "azurerm_resource_group" "spoke" {
   name = data.terraform_remote_state.network_spoke.outputs.spoke_resource_group_name
+}
+
+data "azurerm_private_dns_zone" "hub_openai" {
+  provider            = azurerm.hub
+  name                = "privatelink.openai.azure.com"
+  resource_group_name = data.terraform_remote_state.network_hub.outputs.hub_resource_group_name
+}
+
+data "azurerm_private_dns_zone" "hub_azureml_api" {
+  provider            = azurerm.hub
+  name                = "privatelink.api.azureml.ms"
+  resource_group_name = data.terraform_remote_state.network_hub.outputs.hub_resource_group_name
+}
+
+data "azurerm_private_dns_zone" "hub_notebooks" {
+  provider            = azurerm.hub
+  name                = "privatelink.notebooks.azure.net"
+  resource_group_name = data.terraform_remote_state.network_hub.outputs.hub_resource_group_name
 }
 
 data "azurerm_client_config" "current" {}
@@ -34,7 +62,7 @@ locals {
         version = d.version
       }
       scale = {
-        type     = "Standard"
+        type     = try(d.scale_type, "Standard")
         capacity = d.capacity
       }
     }
@@ -46,6 +74,29 @@ locals {
     24
   )
   ai_foundry_workspace_name = "${local.spoke_ai_foundry_name}-${random_string.ai_foundry_suffix.result}"
+  openai_endpoint_host      = trimsuffix(trimprefix(module.openai.endpoint, "https://"), "/")
+  openai_private_dns_record = trimsuffix(local.openai_endpoint_host, ".openai.azure.com")
+  openai_pe_private_ip      = try(data.azapi_resource.openai_pe[0].output.properties.customDnsConfigs[0].ipAddresses[0], null)
+  ai_foundry_pe_custom_dns  = try(data.azapi_resource.ai_foundry_pe[0].output.properties.customDnsConfigs, [])
+
+  # Map AI Foundry PE FQDNs to corresponding Hub private DNS zones.
+  ai_foundry_dns_records = [
+    for cfg in local.ai_foundry_pe_custom_dns : {
+      fqdn = lower(try(cfg.fqdn, ""))
+      ip   = try(cfg.ipAddresses[0], null)
+      zone = endswith(lower(try(cfg.fqdn, "")), ".api.azureml.ms") ? data.azurerm_private_dns_zone.hub_azureml_api.name : (
+        endswith(lower(try(cfg.fqdn, "")), ".notebooks.azure.net") ? data.azurerm_private_dns_zone.hub_notebooks.name : null
+      )
+      record_name = endswith(lower(try(cfg.fqdn, "")), ".api.azureml.ms") ? trimsuffix(lower(cfg.fqdn), ".api.azureml.ms") : (
+        endswith(lower(try(cfg.fqdn, "")), ".notebooks.azure.net") ? trimsuffix(lower(cfg.fqdn), ".notebooks.azure.net") : null
+      )
+    } if try(cfg.fqdn, null) != null && try(cfg.ipAddresses[0], null) != null
+  ]
+
+  ai_foundry_dns_records_map = {
+    for r in local.ai_foundry_dns_records : "${r.zone}::${r.record_name}" => r
+    if r.zone != null && r.record_name != null
+  }
 }
 
 module "openai" {
@@ -144,6 +195,48 @@ module "openai_private_endpoint" {
   subresource_names    = ["account"]
   private_dns_zone_ids = []
   tags                 = var.tags
+}
+
+data "azapi_resource" "openai_pe" {
+  count = var.enable_private_endpoints ? 1 : 0
+
+  type      = "Microsoft.Network/privateEndpoints@2024-07-01"
+  parent_id = data.azurerm_resource_group.spoke.id
+  name      = "${local.name_prefix}-aoai-pe"
+
+  response_export_values = ["properties.customDnsConfigs"]
+}
+
+data "azapi_resource" "ai_foundry_pe" {
+  count = var.enable_private_endpoints && var.enable_ai_foundry_workspace ? 1 : 0
+
+  type      = "Microsoft.Network/privateEndpoints@2024-07-01"
+  parent_id = data.azurerm_resource_group.spoke.id
+  name      = "${local.name_prefix}-aif-pe"
+
+  response_export_values = ["properties.customDnsConfigs"]
+}
+
+resource "azurerm_private_dns_a_record" "openai_in_hub_zone" {
+  count = var.enable_private_endpoints && local.openai_pe_private_ip != null ? 1 : 0
+
+  provider            = azurerm.hub
+  name                = local.openai_private_dns_record
+  zone_name           = data.azurerm_private_dns_zone.hub_openai.name
+  resource_group_name = data.azurerm_private_dns_zone.hub_openai.resource_group_name
+  ttl                 = 300
+  records             = [local.openai_pe_private_ip]
+}
+
+resource "azurerm_private_dns_a_record" "ai_foundry_in_hub_zone" {
+  for_each = local.ai_foundry_dns_records_map
+
+  provider            = azurerm.hub
+  name                = each.value.record_name
+  zone_name           = each.value.zone
+  resource_group_name = data.terraform_remote_state.network_hub.outputs.hub_resource_group_name
+  ttl                 = 300
+  records             = [each.value.ip]
 }
 
 module "ai_foundry_private_endpoint" {

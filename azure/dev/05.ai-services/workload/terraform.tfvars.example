@@ -15,6 +15,7 @@ tags = {
 
 # Subscription
 spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+hub_subscription_id   = "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
 
 # Backend (Bootstrap의 terraform.tfvars와 동일하게 맞출 것)
 backend_resource_group_name  = "terraform-state-rg"
