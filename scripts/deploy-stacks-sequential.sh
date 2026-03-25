@@ -223,15 +223,21 @@ tags = {
   Environment = "dev"
   ManagedBy   = "Terraform"
 }
+EOF
+    any=1
+  fi
+
+  if [[ "$any" -ne 1 ]]; then
+    rm -f "$out"
+  fi
+}
 
 ensure_required_hub_dns_zones() {
-  local rg_name
-  rg_name="$(
-    az account set --subscription "$HUB_SUBSCRIPTION_ID" >/dev/null
-    az group exists --name "test-x-x-rg" | tr -d '\r'
-  )"
+  local rg_exists
+  az account set --subscription "$HUB_SUBSCRIPTION_ID" >/dev/null
+  rg_exists="$(az group exists --name "test-x-x-rg" | tr -d '\r')"
 
-  if [[ "$rg_name" != "true" ]]; then
+  if [[ "$rg_exists" != "true" ]]; then
     echo "[안내] Hub RG(test-x-x-rg) 미존재로 Hub DNS zone 사전생성을 건너뜁니다."
     return 0
   fi
@@ -246,14 +252,6 @@ ensure_required_hub_dns_zones() {
       echo "  - 존재: $zone"
     fi
   done
-}
-EOF
-    any=1
-  fi
-
-  if [[ "$any" -ne 1 ]]; then
-    rm -f "$out"
-  fi
 }
 
 collect_leaf_dirs_ordered() {
