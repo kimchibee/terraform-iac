@@ -23,6 +23,30 @@ terraform version
 - Terraform 1.6+ (현재 저장소 기준)
 - Hub/Spoke 구독 모두 접근 가능한 계정
 
+### 0.1 공통값 일관 주입 (권장)
+
+루트에서 `scripts/deploy-stacks-sequential.sh`를 실행하면 아래 공통값을 자동 동기화합니다.
+
+- `hub_subscription_id`, `spoke_subscription_id`
+- `project_name`, `environment`, `location`
+- `backend_resource_group_name`, `backend_storage_account_name`, `backend_container_name`
+
+기준값 우선순위:
+- 구독 ID: 환경변수(`HUB_SUBSCRIPTION_ID`, `SPOKE_SUBSCRIPTION_ID`) -> 프롬프트 입력
+- `project_name`, `environment`, `location`: `azure/dev/01.network/resource-group/hub-rg/terraform.tfvars`
+- backend 값: `bootstrap/backend/terraform.tfvars`
+
+실행 예시:
+
+```bash
+cd /c/Users/nonoc/OneDrive/바탕\ 화면/challenge/terraform-iac
+export HUB_SUBSCRIPTION_ID="<hub-subscription-id>"
+export SPOKE_SUBSCRIPTION_ID="<spoke-subscription-id>"
+bash ./scripts/deploy-stacks-sequential.sh
+```
+
+> DNS 리프만 단독으로 수동 실행할 때도, 위 기준값과 동일한 `terraform.tfvars`를 유지해야 드리프트를 줄일 수 있습니다.
+
 ---
 
 ## 1) 작업 디렉토리 이동

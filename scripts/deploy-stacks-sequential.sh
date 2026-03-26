@@ -228,19 +228,18 @@ build_generated_tfvars_if_missing() {
   add_if_var_declared "hub_subscription_id" "$HUB_SUBSCRIPTION_ID"
   add_if_var_declared "spoke_subscription_id" "$SPOKE_SUBSCRIPTION_ID"
   add_if_var_declared "project_name" "$PROJECT_NAME"
+  add_if_var_declared "environment" "$ENVIRONMENT_NAME"
   add_if_var_declared "name_prefix" "$NAME_PREFIX"
   add_if_var_declared "backend_resource_group_name" "$BACKEND_RG"
   add_if_var_declared "backend_storage_account_name" "$BACKEND_SA"
   add_if_var_declared "backend_container_name" "$BACKEND_CONTAINER"
-  add_if_var_declared "location" "$BACKEND_LOCATION"
+  add_if_var_declared "location" "$LOCATION_NAME"
 
   if grep -Rqs --include="*.tf" "variable[[:space:]]\\+\"tags\"" "$leaf_abs"; then
-    cat >> "$out" <<'EOF'
-tags = {
-  Environment = "dev"
-  ManagedBy   = "Terraform"
-}
-EOF
+    printf 'tags = {\n' >> "$out"
+    printf '  Environment = "%s"\n' "$ENVIRONMENT_NAME" >> "$out"
+    printf '  ManagedBy   = "Terraform"\n' >> "$out"
+    printf '}\n' >> "$out"
     any=1
   fi
 
@@ -503,10 +502,18 @@ BACKEND_SA="$(get_tfvar_value "storage_account_name" "$BOOTSTRAP_TFVARS")"
 BACKEND_CONTAINER="$(get_tfvar_value "container_name" "$BOOTSTRAP_TFVARS")"
 BACKEND_LOCATION="$(get_tfvar_value "location" "$BOOTSTRAP_TFVARS")"
 PROJECT_NAME="$(get_tfvar_value "project_name" "$REPO_ROOT/azure/dev/01.network/resource-group/hub-rg/terraform.tfvars")"
+ENVIRONMENT_NAME="$(get_tfvar_value "environment" "$REPO_ROOT/azure/dev/01.network/resource-group/hub-rg/terraform.tfvars")"
+LOCATION_NAME="$(get_tfvar_value "location" "$REPO_ROOT/azure/dev/01.network/resource-group/hub-rg/terraform.tfvars")"
 NAME_PREFIX="$(get_tfvar_value "name_prefix" "$REPO_ROOT/azure/dev/03.shared-services/log-analytics/terraform.tfvars")"
 
 if [[ -z "$PROJECT_NAME" ]]; then
   PROJECT_NAME="test"
+fi
+if [[ -z "$ENVIRONMENT_NAME" ]]; then
+  ENVIRONMENT_NAME="dev"
+fi
+if [[ -z "$LOCATION_NAME" ]]; then
+  LOCATION_NAME="$BACKEND_LOCATION"
 fi
 if [[ -z "$NAME_PREFIX" ]]; then
   NAME_PREFIX="${PROJECT_NAME}-x-x"
@@ -533,11 +540,13 @@ echo "[2/5] tfvars 값 동기화 시작..."
 while IFS= read -r tfvars; do
   replace_if_key_exists "$tfvars" "hub_subscription_id" "$HUB_SUBSCRIPTION_ID"
   replace_if_key_exists "$tfvars" "spoke_subscription_id" "$SPOKE_SUBSCRIPTION_ID"
+  replace_if_key_exists "$tfvars" "project_name" "$PROJECT_NAME"
+  replace_if_key_exists "$tfvars" "environment" "$ENVIRONMENT_NAME"
   replace_if_key_exists "$tfvars" "backend_resource_group_name" "$BACKEND_RG"
   replace_if_key_exists "$tfvars" "backend_storage_account_name" "$BACKEND_SA"
   replace_if_key_exists "$tfvars" "backend_container_name" "$BACKEND_CONTAINER"
-  if [[ -n "$BACKEND_LOCATION" ]]; then
-    replace_if_key_exists "$tfvars" "location" "$BACKEND_LOCATION"
+  if [[ -n "$LOCATION_NAME" ]]; then
+    replace_if_key_exists "$tfvars" "location" "$LOCATION_NAME"
   fi
 done < <(find "$REPO_ROOT/azure/dev" -type f -name "terraform.tfvars" | sort)
 echo "[완료] terraform.tfvars 동기화 완료"

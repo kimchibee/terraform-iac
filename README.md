@@ -45,6 +45,94 @@
 
 > 권장: 위 값을 먼저 문서/메모에 확정한 뒤, 각 리프 `terraform.tfvars`에 동일하게 반영하세요.
 
+### 1.2 구독 ID 확인 및 환경변수 선언
+
+#### 구독 ID 확인 (Azure CLI)
+
+```bash
+az login
+az account list --query "[].{name:name,id:id,tenant:tenantId,isDefault:isDefault}" -o table
+az account show --query "{name:name,id:id,tenant:tenantId}" -o table
+```
+
+- Hub/Spoke를 분리할 경우 각각의 `id`를 기록합니다.
+- 단일 구독으로 테스트할 경우 `hub_subscription_id`와 `spoke_subscription_id`에 동일 ID를 사용합니다.
+
+#### 환경변수 선언 예시
+
+PowerShell:
+
+```powershell
+$env:HUB_SUBSCRIPTION_ID   = "<hub-subscription-id>"
+$env:SPOKE_SUBSCRIPTION_ID = "<spoke-subscription-id>"
+```
+
+Bash:
+
+```bash
+export HUB_SUBSCRIPTION_ID="<hub-subscription-id>"
+export SPOKE_SUBSCRIPTION_ID="<spoke-subscription-id>"
+```
+
+- `scripts/deploy-stacks-sequential.sh`는 위 환경변수가 있으면 우선 사용하고, 없으면 프롬프트로 입력받습니다.
+
+#### (추가) 배포 공통값 환경변수 예시
+
+아래 값은 팀 기준으로 정해 한 세션에서 고정해 두면 편합니다.
+
+PowerShell:
+
+```powershell
+$env:PROJECT_NAME  = "test"
+$env:ENVIRONMENT   = "dev"
+$env:LOCATION      = "Korea Central"
+$env:BACKEND_RG    = "terraform-state-rg"
+$env:BACKEND_SA    = "tfstatexxxxxxxx"
+$env:BACKEND_CONTAINER = "tfstate"
+```
+
+Bash:
+
+```bash
+export PROJECT_NAME="test"
+export ENVIRONMENT="dev"
+export LOCATION="Korea Central"
+export BACKEND_RG="terraform-state-rg"
+export BACKEND_SA="tfstatexxxxxxxx"
+export BACKEND_CONTAINER="tfstate"
+```
+
+> 참고: 현재 `deploy-stacks-sequential.sh`가 환경변수로 직접 읽는 값은 `HUB_SUBSCRIPTION_ID`, `SPOKE_SUBSCRIPTION_ID`입니다.  
+> `project_name`, `environment`, `location` 기준값은 `azure/dev/01.network/resource-group/hub-rg/terraform.tfvars`,  
+> backend 기준값은 `bootstrap/backend/terraform.tfvars`에서 읽어 전체 리프에 동기화합니다.
+
+### 1.3 `project_name`, `environment`, `location` 기준
+
+#### 어떻게 정하나?
+
+- `project_name`: 리소스 이름 접두에 쓰일 프로젝트 식별자 (예: `test`, `demo`, `team1`)
+- `environment`: 배포 환경명 (예: `dev`, `stg`, `prod`)
+- `location`: Azure 리전 (예: `Korea Central`, `East US`)
+
+위 3개는 Azure에서 자동 조회되는 값이 아니므로, **팀/환경 기준으로 직접 정의**해야 합니다.
+
+#### 임의로 정해도 되나?
+
+- 네, 가능하지만 **모든 리프에서 일관되게 동일 값**을 사용해야 합니다.
+- 특히 `project_name`은 리소스 이름 규칙에 직접 영향을 주므로 중간 변경 시 재생성(recreate)이 발생할 수 있습니다.
+
+#### 어디에 입력해야 전체 스택에 반영되나?
+
+- 필수 기준 파일:
+  - `bootstrap/backend/terraform.tfvars` -> `location` 기준값
+  - `azure/dev/01.network/resource-group/hub-rg/terraform.tfvars` -> `project_name` 기준값
+- 권장:
+  - 각 리프의 `terraform.tfvars`에 `project_name`, `environment`, `location`을 동일하게 반영
+
+주의:
+- `deploy-stacks-sequential.sh`는 `hub_subscription_id`, `spoke_subscription_id`, `project_name`, `environment`, `location`, backend 계열 값을 동기화합니다.
+- 기준값은 `hub-rg`와 `bootstrap/backend`의 `terraform.tfvars`에서 읽으므로, 두 파일의 값을 먼저 확정한 뒤 실행하세요.
+
 ---
 
 ## 2. modules / IaC 레포의 역할·정의·디렉토리 구조
