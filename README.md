@@ -505,6 +505,30 @@ terraform apply -var-file terraform.tfvars
 - **backend.hcl**은 `./scripts/generate-backend-hcl.sh` 실행으로 생성됩니다. 수동 작성 방법은 **Bootstrap 스택 README** (`bootstrap/backend/README.md`)를 참고하세요.
 - **삭제(롤백) 시**: **배포의 역순**이 안전합니다. **`09.connectivity` 각 리프** → `08.rbac`·`07.identity` 각 리프 → `06.compute` VM 리프 → … → `01.network/route/*` → `01.network/security-policy/*` → `01.network/subnet/spoke-*` → `01.network/vnet/spoke-vnet` → `01.network/resource-group/spoke-rg` → `01.network/subnet/hub-*` → `01.network/vnet/hub-vnet` → `01.network/network-security-group/*` → `01.network/application-security-group/*` → `01.network/resource-group/hub-rg`. 세부는 `01.network/README.md`, `08.rbac/README.md`, `09.connectivity/README.md` 참고.
 
+### 3.2.0 IP 대역 변경 가이드 (VNet/Subnet)
+
+IP 대역(CIDR) 추가/변경 시에는 아래 파일을 기준으로 수정합니다.
+
+| 구분 | 수정 파일 | 주요 항목 |
+|------|-----------|-----------|
+| Hub VNet 주소 공간 | `azure/dev/01.network/vnet/hub-vnet/terraform.tfvars` | `hub_vnet_address_space` |
+| Hub Subnet CIDR | `azure/dev/01.network/subnet/<hub-*-subnet>/main.tf` | `address_prefixes` (예: `hub-monitoring-vm-subnet`, `hub-pep-subnet`) |
+| Spoke VNet 주소 공간 | `azure/dev/01.network/vnet/spoke-vnet/variables.tf` | `vnet_address_space` 기본값 |
+| Spoke Subnet CIDR | `azure/dev/01.network/subnet/<spoke-*-subnet>/main.tf` | `address_prefixes` (예: `spoke-apim-subnet`, `spoke-pep-subnet`) |
+| UDR 목적지 CIDR(필요 시) | `azure/dev/01.network/route/hub-route-default/variables.tf`, `azure/dev/01.network/route/spoke-route-default/variables.tf` | `spoke_vnet_cidr_fallback`, `hub_monitoring_subnet_cidr_fallback`, `custom_routes` |
+
+권장 적용 순서(최소):
+
+1. `01.network/vnet/hub-vnet`, `01.network/vnet/spoke-vnet`
+2. 변경한 서브넷 리프만 (`01.network/subnet/*`)
+3. `01.network/route/hub-route-default`, `01.network/route/spoke-route-default`
+4. `09.connectivity/peering/hub-to-spoke`, `09.connectivity/peering/spoke-to-hub` 재검증
+
+주의:
+- 기존 리소스가 붙은 Subnet의 CIDR 변경은 교체(recreate)가 발생할 수 있습니다.
+- Hub/Spoke CIDR이 겹치면 Peering/Route가 실패할 수 있습니다.
+- 변경 후에는 `scripts/deploy-stacks-sequential.sh`로 전체 검증을 권장합니다.
+
 ### 3.2.1 실배포 기준 오류 대응
 
 실제 배포(`network -> connectivity`)에서 반복 확인된 오류와 대응 절차입니다.
