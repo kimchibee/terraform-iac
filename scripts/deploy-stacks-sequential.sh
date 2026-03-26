@@ -20,6 +20,7 @@ RUN_ID="$(date +%Y%m%d-%H%M%S)"
 RUN_LOG_DIR="$LOG_ROOT/deploy-$RUN_ID"
 SUMMARY_TSV="$RUN_LOG_DIR/deploy-summary.tsv"
 RESOURCE_TSV="$RUN_LOG_DIR/deployed-resources.tsv"
+FAILED_APPLY_COUNT=0
 
 STACK_ORDER=(
   "01.network"
@@ -119,6 +120,22 @@ read_guid() {
     fi
     echo "  - GUID 형식이 아닙니다. 예: 12345678-1234-1234-1234-123456789abc"
   done
+}
+
+resolve_subscription_id() {
+  local current_value="${1:-}"
+  local prompt="$2"
+
+  if [[ -n "$current_value" ]]; then
+    if is_guid "$current_value"; then
+      echo "$current_value"
+      return 0
+    fi
+    echo "ERROR: $prompt 값이 GUID 형식이 아닙니다: $current_value" >&2
+    exit 1
+  fi
+
+  read_guid "$prompt"
 }
 
 get_tfvar_value() {
@@ -359,6 +376,9 @@ apply_leaf() {
   ) 2>&1 | tee "$log_file" || status="failed"
 
   printf "%s\t%s\t%s\t%s\n" "$stack" "$leaf_rel" "$status" "$log_file" >> "$SUMMARY_TSV"
+  if [[ "$status" == "failed" ]]; then
+    FAILED_APPLY_COUNT=$((FAILED_APPLY_COUNT + 1))
+  fi
 
   if [[ "$status" == "success" ]]; then
     (
@@ -418,6 +438,7 @@ test_monitoring_vm_openai() {
   az account set --subscription "$HUB_SUBSCRIPTION_ID" >/dev/null
 
   local dep result message
+  local failed_tests=0
   for dep in gpt-41-mini gpt-5-mini; do
     local vm_script
     vm_script=$(
@@ -450,10 +471,17 @@ EOF
       result="success"
     else
       result="failed"
+      failed_tests=$((failed_tests + 1))
     fi
     printf "gpt_test\t%s\t%s\t%s\n" "$dep" "$result" "$test_log" >> "$SUMMARY_TSV"
     echo "GPT 호출 테스트 ($dep): $result" | tee -a "$test_log"
   done
+
+  if [[ "$failed_tests" -gt 0 ]]; then
+    return 1
+  fi
+
+  return 0
 }
 
 echo -e "stack\tleaf\tstatus\tlog_file" > "$SUMMARY_TSV"
@@ -467,8 +495,8 @@ fi
 
 print_guide
 
-HUB_SUBSCRIPTION_ID="$(read_guid "Hub 구독 ID 입력")"
-SPOKE_SUBSCRIPTION_ID="$(read_guid "Spoke 구독 ID 입력")"
+HUB_SUBSCRIPTION_ID="$(resolve_subscription_id "${HUB_SUBSCRIPTION_ID:-}" "Hub 구독 ID 입력")"
+SPOKE_SUBSCRIPTION_ID="$(resolve_subscription_id "${SPOKE_SUBSCRIPTION_ID:-}" "Spoke 구독 ID 입력")"
 
 BACKEND_RG="$(get_tfvar_value "resource_group_name" "$BOOTSTRAP_TFVARS")"
 BACKEND_SA="$(get_tfvar_value "storage_account_name" "$BOOTSTRAP_TFVARS")"
@@ -575,3 +603,13 @@ echo "로그 디렉터리: $RUN_LOG_DIR"
 
 echo
 test_monitoring_vm_openai
+
+if [[ "$FAILED_APPLY_COUNT" -gt 0 ]]; then
+  echo "ERROR: 실패한 리프가 ${FAILED_APPLY_COUNT}개 있습니다. 로그를 확인하세요: $RUN_LOG_DIR"
+  exit 1
+fi
+
+if awk -F'\t' 'NR>1 && $1=="gpt_test" && $3=="failed"{exit 0} END{exit 1}' "$SUMMARY_TSV"; then
+  echo "ERROR: monitoring-vm GPT 호출 테스트에 실패한 배포가 있습니다. 로그를 확인하세요: $RUN_LOG_DIR"
+  exit 1
+fi
