@@ -2,28 +2,38 @@
 
 # -----------------------------------------------------------------------------
 # 목적: AVM vendoring + ID 주입 작업 후, 각 스택을 의존성 순서대로
-#       terraform init → validate → plan 까지 실행해 빠르게 검증한다.
+#       빠르게 검증한다. 실제 리소스는 절대 만들지 않는다 (apply 없음).
 #
-# 동작:
-#   - 실제 리소스를 만들지 않는다 (apply 없음)
-#   - 각 리프에서: init -upgrade -backend-config=backend.hcl → validate → plan
-#   - 결과는 scripts/logs/verify-<RUN_ID>/<리프>.log 에 저장
-#   - 마지막에 init/validate/plan 단계별 PASS/FAIL 요약 표 출력
+# 동작 모드 (각 리프마다 자동 선택):
+#
+#   [LITE 모드]  backend.hcl 이 없을 때 — Azure 접근 0
+#     - terraform init -backend=false   (모듈만 다운로드, backend 초기화 안 함)
+#     - terraform validate              (HCL 구문, 변수 타입, 모듈 인터페이스)
+#     - plan은 SKIP (remote_state를 읽을 수 없으므로)
+#     → vendoring + ID 주입의 문법/스키마 회귀를 99% 잡음
+#
+#   [FULL 모드]  backend.hcl 이 있을 때 — Azure 접근 필요
+#     - terraform init -upgrade -backend-config=backend.hcl
+#     - terraform validate
+#     - terraform plan -lock=false      (실제 Azure 상태와 비교)
 #
 # 사용법:
-#   ./scripts/verify-stacks-plan.sh                # 전체 의존성 순서로 검증
-#   ./scripts/verify-stacks-plan.sh 01.network     # 특정 스택만 검증
+#   ./scripts/verify-stacks-plan.sh                  # 전체 의존성 순서
+#   ./scripts/verify-stacks-plan.sh 01.network       # 특정 스택만
 #   ./scripts/verify-stacks-plan.sh --leaf azure/dev/01.network/vnet/hub-vnet
-#                                                  # 단일 리프만 검증
-#   ./scripts/verify-stacks-plan.sh --no-init      # init 생략 (기존 .terraform 재사용)
+#   ./scripts/verify-stacks-plan.sh --lite           # 모든 리프를 LITE 모드 강제
+#                                                    # (backend.hcl 있어도 plan 안 함)
+#   ./scripts/verify-stacks-plan.sh --no-init        # init 생략 (재실행 가속)
 #
 # 사전 조건:
-#   - terraform CLI 설치
-#   - az login 완료 (HUB_SUBSCRIPTION_ID 환경변수 권장)
-#   - bootstrap/backend 가 이미 배포되어 backend storage가 존재
-#   - 각 리프에 backend.hcl 또는 terraform.tfvars 가 준비됨
-#     (없으면 deploy-stacks-sequential.sh 의 ensure_backend_hcl_for_leaves 를
-#      먼저 실행하세요)
+#   - terraform CLI 설치 (PATH)
+#   - LITE 모드: 추가 사전 조건 없음
+#   - FULL 모드: az login + backend storage 존재 + 각 리프 backend.hcl 생성
+#                (deploy-stacks-sequential.sh 가 자동 생성)
+#
+# 결과:
+#   - scripts/logs/verify-<RUN_ID>/<리프>.log 에 리프별 상세 로그
+#   - scripts/logs/verify-<RUN_ID>/verify-summary.tsv 에 단계별 PASS/FAIL/SKIP
 # -----------------------------------------------------------------------------
 
 set -uo pipefail
@@ -36,9 +46,10 @@ RUN_ID="$(date +%Y%m%d-%H%M%S)"
 RUN_LOG_DIR="$LOG_ROOT/verify-$RUN_ID"
 SUMMARY_TSV="$RUN_LOG_DIR/verify-summary.tsv"
 mkdir -p "$RUN_LOG_DIR"
-printf "stack\tleaf\tinit\tvalidate\tplan\tlog\n" > "$SUMMARY_TSV"
+printf "stack\tleaf\tmode\tinit\tvalidate\tplan\tlog\n" > "$SUMMARY_TSV"
 
 DO_INIT=1
+FORCE_LITE=0
 TARGET_STACK=""
 TARGET_LEAF=""
 
@@ -48,12 +59,16 @@ while [[ $# -gt 0 ]]; do
       DO_INIT=0
       shift
       ;;
+    --lite)
+      FORCE_LITE=1
+      shift
+      ;;
     --leaf)
       TARGET_LEAF="$2"
       shift 2
       ;;
     -h|--help)
-      sed -n '3,30p' "$0"
+      sed -n '3,38p' "$0"
       exit 0
       ;;
     *)
@@ -186,26 +201,28 @@ verify_leaf() {
   local init_status="SKIP"
   local validate_status="SKIP"
   local plan_status="SKIP"
+  local mode="LITE"
+
+  # backend.hcl 유무로 모드 자동 선택 (--lite 강제 시 무조건 LITE)
+  if [[ "$FORCE_LITE" -eq 0 && -f "$leaf_abs/backend.hcl" ]]; then
+    mode="FULL"
+  fi
 
   echo
-  echo "===== [STACK: $stack] [LEAF: $leaf_rel] ====="
+  echo "===== [STACK: $stack] [LEAF: $leaf_rel] [MODE: $mode] ====="
   echo "log: $log_file"
-
-  if [[ ! -f "$leaf_abs/backend.hcl" && "$DO_INIT" -eq 1 ]]; then
-    echo "WARN: backend.hcl 없음 → init 단계 SKIP" | tee "$log_file"
-    init_status="NO_BACKEND_HCL"
-    printf "%s\t%s\t%s\t%s\t%s\t%s\n" \
-      "$stack" "$leaf_rel" "$init_status" "$validate_status" "$plan_status" "$log_file" \
-      >> "$SUMMARY_TSV"
-    return
-  fi
 
   (
     cd "$leaf_abs"
 
     if [[ "$DO_INIT" -eq 1 ]]; then
-      echo "[1/3] terraform init -upgrade -backend-config=backend.hcl"
-      terraform init -upgrade -backend-config=backend.hcl -input=false -no-color
+      if [[ "$mode" == "FULL" ]]; then
+        echo "[1/3] terraform init -upgrade -backend-config=backend.hcl"
+        terraform init -upgrade -backend-config=backend.hcl -input=false -no-color
+      else
+        echo "[1/3] terraform init -backend=false (LITE: 모듈만 다운로드)"
+        terraform init -backend=false -upgrade -input=false -no-color
+      fi
       echo "[1/3] init OK"
     else
       echo "[1/3] init SKIP (--no-init)"
@@ -215,37 +232,53 @@ verify_leaf() {
     terraform validate -no-color
     echo "[2/3] validate OK"
 
-    echo "[3/3] terraform plan"
-    if [[ -f "terraform.tfvars" ]]; then
-      terraform plan -input=false -no-color -lock=false \
-        -var-file=terraform.tfvars
-    elif [[ -f "terraform.generated.auto.tfvars" ]]; then
-      terraform plan -input=false -no-color -lock=false \
-        -var-file=terraform.generated.auto.tfvars
+    if [[ "$mode" == "FULL" ]]; then
+      echo "[3/3] terraform plan"
+      if [[ -f "terraform.tfvars" ]]; then
+        terraform plan -input=false -no-color -lock=false \
+          -var-file=terraform.tfvars
+      elif [[ -f "terraform.generated.auto.tfvars" ]]; then
+        terraform plan -input=false -no-color -lock=false \
+          -var-file=terraform.generated.auto.tfvars
+      else
+        terraform plan -input=false -no-color -lock=false
+      fi
+      echo "[3/3] plan OK"
     else
-      terraform plan -input=false -no-color -lock=false
+      echo "[3/3] plan SKIP (LITE 모드: backend.hcl 없음 또는 --lite 지정)"
     fi
-    echo "[3/3] plan OK"
   ) > "$log_file" 2>&1
   local rc=$?
 
-  # 단계별 PASS/FAIL 추출
+  # 단계별 PASS/FAIL/SKIP 추출
   if [[ "$DO_INIT" -eq 1 ]]; then
     if grep -q "\[1/3\] init OK" "$log_file"; then init_status="PASS"; else init_status="FAIL"; fi
   fi
-  if grep -q "\[2/3\] validate OK" "$log_file"; then validate_status="PASS"; else validate_status="FAIL"; fi
-  if grep -q "\[3/3\] plan OK" "$log_file"; then plan_status="PASS"; else plan_status="FAIL"; fi
+  if grep -q "\[2/3\] validate OK" "$log_file"; then
+    validate_status="PASS"
+  elif grep -q "\[2/3\] terraform validate" "$log_file"; then
+    validate_status="FAIL"
+  fi
+  if [[ "$mode" == "FULL" ]]; then
+    if grep -q "\[3/3\] plan OK" "$log_file"; then
+      plan_status="PASS"
+    elif grep -q "\[3/3\] terraform plan" "$log_file"; then
+      plan_status="FAIL"
+    fi
+  else
+    plan_status="SKIP_LITE"
+  fi
 
   if [[ "$rc" -eq 0 ]]; then
-    echo "  → init=$init_status validate=$validate_status plan=$plan_status"
+    echo "  → [$mode] init=$init_status validate=$validate_status plan=$plan_status"
   else
-    echo "  → FAILED (init=$init_status validate=$validate_status plan=$plan_status)"
+    echo "  → [$mode] FAILED (init=$init_status validate=$validate_status plan=$plan_status)"
     echo "  → 마지막 20줄:"
     tail -20 "$log_file" | sed 's/^/    /'
   fi
 
-  printf "%s\t%s\t%s\t%s\t%s\t%s\n" \
-    "$stack" "$leaf_rel" "$init_status" "$validate_status" "$plan_status" "$log_file" \
+  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+    "$stack" "$leaf_rel" "$mode" "$init_status" "$validate_status" "$plan_status" "$log_file" \
     >> "$SUMMARY_TSV"
 }
 
@@ -286,17 +319,19 @@ echo "===== 검증 요약 ====="
 column -t -s $'\t' "$SUMMARY_TSV" 2>/dev/null || cat "$SUMMARY_TSV"
 
 total=$(($(wc -l < "$SUMMARY_TSV") - 1))
-pass_plan=$(awk -F'\t' 'NR>1 && $5=="PASS"' "$SUMMARY_TSV" | wc -l)
-fail_plan=$(awk -F'\t' 'NR>1 && $5=="FAIL"' "$SUMMARY_TSV" | wc -l)
-fail_init=$(awk -F'\t' 'NR>1 && $3=="FAIL"' "$SUMMARY_TSV" | wc -l)
-fail_validate=$(awk -F'\t' 'NR>1 && $4=="FAIL"' "$SUMMARY_TSV" | wc -l)
+fail_init=$(awk -F'\t' 'NR>1 && $4=="FAIL"' "$SUMMARY_TSV" | wc -l)
+fail_validate=$(awk -F'\t' 'NR>1 && $5=="FAIL"' "$SUMMARY_TSV" | wc -l)
+fail_plan=$(awk -F'\t' 'NR>1 && $6=="FAIL"' "$SUMMARY_TSV" | wc -l)
+pass_validate=$(awk -F'\t' 'NR>1 && $5=="PASS"' "$SUMMARY_TSV" | wc -l)
+pass_plan=$(awk -F'\t' 'NR>1 && $6=="PASS"' "$SUMMARY_TSV" | wc -l)
+mode_lite=$(awk -F'\t' 'NR>1 && $3=="LITE"' "$SUMMARY_TSV" | wc -l)
+mode_full=$(awk -F'\t' 'NR>1 && $3=="FULL"' "$SUMMARY_TSV" | wc -l)
 
 echo
-echo "총 리프: $total"
-echo "  init    FAIL: $fail_init"
-echo "  validate FAIL: $fail_validate"
-echo "  plan    FAIL: $fail_plan"
-echo "  plan    PASS: $pass_plan"
+echo "총 리프: $total  (LITE: $mode_lite / FULL: $mode_full)"
+echo "  init     FAIL: $fail_init"
+echo "  validate FAIL: $fail_validate   PASS: $pass_validate"
+echo "  plan     FAIL: $fail_plan   PASS: $pass_plan   (LITE 모드는 plan SKIP)"
 echo
 echo "상세 로그: $RUN_LOG_DIR"
 
