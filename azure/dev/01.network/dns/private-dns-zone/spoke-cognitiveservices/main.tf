@@ -37,14 +37,19 @@ data "terraform_remote_state" "spoke_rg" {
   }
 }
 
-module "zone" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-dns-zone?ref=chore/avm-wave1-modules-prune-and-convert"
+data "azurerm_resource_group" "parent" {
+  name = data.terraform_remote_state.spoke_rg.outputs.resource_group_name
+}
 
-  name                = "privatelink.cognitiveservices.azure.com"
-  resource_group_name = data.terraform_remote_state.spoke_rg.outputs.resource_group_name
-  tags                = var.tags
+module "zone" {
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privatednszone?ref=main"
+
+  domain_name      = "privatelink.cognitiveservices.azure.com"
+  parent_id        = data.azurerm_resource_group.parent.id
+  tags             = var.tags
+  enable_telemetry = false
 }
 
 output "private_dns_zone_id" {
-  value = module.zone.id
+  value = module.zone.resource_id
 }

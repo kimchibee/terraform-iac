@@ -68,20 +68,34 @@ data "terraform_remote_state" "public_ip" {
   }
 }
 
-module "virtual_network_gateway" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-network-gateway?ref=chore/avm-wave1-modules-prune-and-convert"
+data "azurerm_resource_group" "parent" {
+  name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
+}
 
-  name                = "${var.project_name}-x-x-vpng"
-  resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
-  location            = var.location
-  type                = var.vpn_gateway_type
-  vpn_type            = "RouteBased"
-  sku                 = var.vpn_gateway_sku
-  subnet_id           = data.terraform_remote_state.gateway_subnet.outputs.hub_subnet_id
-  public_ip_address_id = data.terraform_remote_state.public_ip.outputs.public_ip_id
-  tags                = var.tags
+locals {
+  gateway_subnet_id  = data.terraform_remote_state.gateway_subnet.outputs.hub_subnet_id
+  virtual_network_id = regex("(?i)(.*/virtualNetworks/[^/]+)/subnets/[^/]+", local.gateway_subnet_id)[0]
+}
+
+module "virtual_network_gateway" {
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-ptn-vnetgateway?ref=main"
+
+  parent_id = data.azurerm_resource_group.parent.id
+  name      = "${var.project_name}-x-x-vpng"
+  location  = var.location
+  tags      = var.tags
+
+  virtual_network_id                = local.virtual_network_id
+  virtual_network_gateway_subnet_id = local.gateway_subnet_id
+
+  vpn_type                  = "RouteBased"
+  vpn_generation            = "Generation1"
+  vpn_active_active_enabled = false
+  vpn_bgp_enabled           = false
+
+  enable_telemetry = false
 }
 
 output "virtual_network_gateway_id" {
-  value = module.virtual_network_gateway.id
+  value = module.virtual_network_gateway.resource_id
 }

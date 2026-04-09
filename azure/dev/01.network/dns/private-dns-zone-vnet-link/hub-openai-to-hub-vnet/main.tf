@@ -33,11 +33,15 @@ data "terraform_remote_state" "vnet" {
   }
 }
 
-module "link" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-dns-zone-vnet-link?ref=chore/avm-wave1-modules-prune-and-convert"
+data "azurerm_private_dns_zone" "zone" {
+  name                = "privatelink.openai.azure.com"
+  resource_group_name = data.terraform_remote_state.vnet.outputs.hub_resource_group_name
+}
 
-  name                  = "hub-openai-to-hub-vnet"
-  resource_group_name   = data.terraform_remote_state.vnet.outputs.hub_resource_group_name
-  private_dns_zone_name = "privatelink.openai.azure.com"
-  virtual_network_id    = data.terraform_remote_state.vnet.outputs.hub_vnet_id
+module "link" {
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privatednszone/modules/private_dns_virtual_network_link?ref=main"
+
+  name               = "hub-openai-to-hub-vnet"
+  parent_id          = data.azurerm_private_dns_zone.zone.id
+  virtual_network_id = data.terraform_remote_state.vnet.outputs.hub_vnet_id
 }

@@ -155,45 +155,57 @@ resource "azurerm_machine_learning_workspace" "ai_foundry" {
   tags = var.tags
 }
 
+locals {
+  pep_common_tags = merge(var.tags, {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  })
+}
+
 module "openai_private_endpoint" {
   count  = var.enable_private_endpoints ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privateendpoint?ref=main"
 
   providers = {
     azurerm = azurerm.spoke
   }
 
-  project_name         = var.project_name
-  environment          = var.environment
-  name                 = "${local.name_prefix}-aoai-pe"
-  location             = var.location
-  resource_group_name  = data.azurerm_resource_group.spoke.name
-  subnet_id            = data.terraform_remote_state.spoke_pep_subnet.outputs.spoke_subnet_id
-  target_resource_id   = module.openai.id
-  subresource_names    = ["account"]
-  private_dns_zone_ids = [data.azurerm_private_dns_zone.hub_openai.id]
-  tags                 = var.tags
+  name                            = "${local.name_prefix}-aoai-pe"
+  location                        = var.location
+  resource_group_name             = data.azurerm_resource_group.spoke.name
+  subnet_resource_id              = data.terraform_remote_state.spoke_pep_subnet.outputs.spoke_subnet_id
+  network_interface_name          = "nic-${local.name_prefix}-aoai-pe"
+  private_connection_resource_id  = module.openai.id
+  subresource_names               = ["account"]
+  tags                            = local.pep_common_tags
+  enable_telemetry                = false
+  private_service_connection_name = "psc-${local.name_prefix}-aoai-pe"
+  private_dns_zone_resource_ids   = [data.azurerm_private_dns_zone.hub_openai.id]
+  private_dns_zone_group_name     = "default"
 }
 
 module "ai_foundry_private_endpoint" {
   count  = var.enable_private_endpoints && var.enable_ai_foundry_workspace ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privateendpoint?ref=main"
 
   providers = {
     azurerm = azurerm.spoke
   }
 
-  project_name         = var.project_name
-  environment          = var.environment
-  name                 = "${local.name_prefix}-aif-pe"
-  location             = var.location
-  resource_group_name  = data.azurerm_resource_group.spoke.name
-  subnet_id            = data.terraform_remote_state.spoke_pep_subnet.outputs.spoke_subnet_id
-  target_resource_id   = azurerm_machine_learning_workspace.ai_foundry[0].id
-  subresource_names    = ["amlworkspace"]
-  private_dns_zone_ids = [
+  name                            = "${local.name_prefix}-aif-pe"
+  location                        = var.location
+  resource_group_name             = data.azurerm_resource_group.spoke.name
+  subnet_resource_id              = data.terraform_remote_state.spoke_pep_subnet.outputs.spoke_subnet_id
+  network_interface_name          = "nic-${local.name_prefix}-aif-pe"
+  private_connection_resource_id  = azurerm_machine_learning_workspace.ai_foundry[0].id
+  subresource_names               = ["amlworkspace"]
+  tags                            = local.pep_common_tags
+  enable_telemetry                = false
+  private_service_connection_name = "psc-${local.name_prefix}-aif-pe"
+  private_dns_zone_resource_ids = [
     data.azurerm_private_dns_zone.hub_azureml_api.id,
     data.azurerm_private_dns_zone.hub_notebooks.id
   ]
-  tags                 = var.tags
+  private_dns_zone_group_name = "default"
 }

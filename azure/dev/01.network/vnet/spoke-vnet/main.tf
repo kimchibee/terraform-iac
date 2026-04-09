@@ -13,21 +13,25 @@ data "terraform_remote_state" "spoke_rg" {
 locals {
   name_prefix     = "${var.project_name}-x-x"
   spoke_vnet_name = "${local.name_prefix}-${var.vnet_suffix}"
+  common_tags = merge(var.tags, {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  })
 }
 
 module "spoke_vnet" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-virtualnetwork-v0.7.1?ref=main"
 
   providers = {
     azurerm = azurerm.spoke
   }
 
-  project_name        = var.project_name
-  environment         = var.environment
-  location            = var.location
-  tags                = var.tags
+  name                = local.spoke_vnet_name
   resource_group_name = data.terraform_remote_state.spoke_rg.outputs.resource_group_name
-  vnet_name           = local.spoke_vnet_name
-  vnet_address_space  = var.vnet_address_space
+  location            = var.location
+  address_space       = toset(var.vnet_address_space)
   subnets             = {}
+  tags                = local.common_tags
+  enable_telemetry    = false
 }

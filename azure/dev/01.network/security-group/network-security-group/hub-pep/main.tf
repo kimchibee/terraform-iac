@@ -71,16 +71,7 @@ data "terraform_remote_state" "keyvault_clients" {
 
 locals {
   nsg_name = "${var.project_name}-x-x-pep-nsg"
-}
-
-module "network_security_group" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/network-security-group?ref=chore/avm-wave1-modules-prune-and-convert"
-
-  name                = local.nsg_name
-  location            = var.location
-  resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
-  tags                = var.tags
-  security_rules = [
+  nsg_security_rules = [
     {
       name                                  = "AllowKeyVaultClientsInbound443"
       priority                              = 4095
@@ -106,8 +97,38 @@ module "network_security_group" {
   ]
 }
 
+module "network_security_group" {
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-networksecuritygroup?ref=main"
+
+  name                = local.nsg_name
+  location            = var.location
+  resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
+  tags                = var.tags
+  enable_telemetry    = false
+  security_rules = {
+    for rule in local.nsg_security_rules : rule.name => {
+      name                                       = rule.name
+      priority                                   = rule.priority
+      direction                                  = rule.direction
+      access                                     = rule.access
+      protocol                                   = rule.protocol
+      source_port_range                          = try(rule.source_port_range, null)
+      source_port_ranges                         = try(rule.source_port_ranges, null)
+      destination_port_range                     = try(rule.destination_port_range, null)
+      destination_port_ranges                    = try(rule.destination_port_ranges, null)
+      source_address_prefix                      = try(rule.source_address_prefix, null)
+      source_address_prefixes                    = try(rule.source_address_prefixes, null)
+      destination_address_prefix                 = try(rule.destination_address_prefix, null)
+      destination_address_prefixes               = try(rule.destination_address_prefixes, null)
+      source_application_security_group_ids      = try(toset(rule.source_application_security_group_ids), null)
+      destination_application_security_group_ids = try(toset(rule.destination_application_security_group_ids), null)
+      description                                = try(rule.description, null)
+    }
+  }
+}
+
 output "network_security_group_id" {
-  value = module.network_security_group.id
+  value = module.network_security_group.resource_id
 }
 
 output "network_security_group_name" {

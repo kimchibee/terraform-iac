@@ -3,7 +3,7 @@ output "hub_subnet_key" {
 }
 
 output "hub_subnet_id" {
-  value = module.subnet.id
+  value = module.subnet.resource_id
 }
 
 output "hub_subnet_name" {

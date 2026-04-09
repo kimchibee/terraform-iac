@@ -33,7 +33,7 @@ data "azurerm_resource_group" "hub" {
 }
 
 module "firewall_policy" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/firewall-policy?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-firewallpolicy?ref=main"
 
   location            = data.azurerm_resource_group.hub.location
   name                = "${local.name_prefix}-fwpol"

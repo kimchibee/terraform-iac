@@ -33,11 +33,15 @@ data "terraform_remote_state" "vnet" {
   }
 }
 
-module "link" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-dns-zone-vnet-link?ref=chore/avm-wave1-modules-prune-and-convert"
+data "azurerm_private_dns_zone" "zone" {
+  name                = "privatelink.api.azureml.ms"
+  resource_group_name = data.terraform_remote_state.vnet.outputs.spoke_resource_group_name
+}
 
-  name                  = "spoke-ml-to-spoke-vnet"
-  resource_group_name   = data.terraform_remote_state.vnet.outputs.spoke_resource_group_name
-  private_dns_zone_name = "privatelink.api.azureml.ms"
-  virtual_network_id    = data.terraform_remote_state.vnet.outputs.spoke_vnet_id
+module "link" {
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privatednszone/modules/private_dns_virtual_network_link?ref=main"
+
+  name               = "spoke-ml-to-spoke-vnet"
+  parent_id          = data.azurerm_private_dns_zone.zone.id
+  virtual_network_id = data.terraform_remote_state.vnet.outputs.spoke_vnet_id
 }

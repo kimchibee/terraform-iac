@@ -13,19 +13,30 @@ data "terraform_remote_state" "vnet_spoke" {
 }
 
 locals {
-  subnet_name = "apim-snet"
+  subnet_name       = "apim-snet"
+  service_endpoints = ["Microsoft.Storage", "Microsoft.KeyVault", "Microsoft.EventHub"]
+}
+
+data "azurerm_virtual_network" "parent" {
+  provider            = azurerm.spoke
+  name                = data.terraform_remote_state.vnet_spoke.outputs.spoke_vnet_name
+  resource_group_name = data.terraform_remote_state.vnet_spoke.outputs.spoke_resource_group_name
 }
 
 module "subnet" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/subnet?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-virtualnetwork-v0.17.1/modules/subnet?ref=main"
 
   providers = {
     azurerm = azurerm.spoke
   }
 
-  name                 = local.subnet_name
-  resource_group_name  = data.terraform_remote_state.vnet_spoke.outputs.spoke_resource_group_name
-  virtual_network_name = data.terraform_remote_state.vnet_spoke.outputs.spoke_vnet_name
-  address_prefixes     = ["10.1.0.0/26"]
-  service_endpoints    = ["Microsoft.Storage", "Microsoft.KeyVault", "Microsoft.EventHub"]
+  name             = local.subnet_name
+  parent_id        = data.azurerm_virtual_network.parent.id
+  address_prefixes = ["10.1.0.0/26"]
+  service_endpoints_with_location = [
+    for service in local.service_endpoints : {
+      service   = service
+      locations = ["*"]
+    }
+  ]
 }

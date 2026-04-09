@@ -3,9 +3,9 @@ output "resource_group_name" {
 }
 
 output "resource_group_id" {
-  value = module.resource_group.id
+  value = module.resource_group.resource_id
 }
 
 output "location" {
-  value = module.resource_group.location
+  value = var.location
 }

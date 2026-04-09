@@ -14,15 +14,18 @@ output "hub_resource_group_id" {
 
 output "hub_vnet_id" {
   description = "Hub VNet ID"
-  value       = module.hub_vnet.vnet_id
+  value       = module.hub_vnet.resource_id
 }
 
 output "hub_vnet_name" {
   description = "Hub VNet name"
-  value       = module.hub_vnet.vnet_name
+  value       = module.hub_vnet.name
 }
 
 output "hub_vnet_address_space" {
   description = "Hub VNet address space"
-  value       = module.hub_vnet.vnet_address_space
+  value = try(
+    module.hub_vnet.resource.output.properties.addressSpace.addressPrefixes,
+    module.hub_vnet.resource.body.properties.addressSpace.addressPrefixes
+  )
 }

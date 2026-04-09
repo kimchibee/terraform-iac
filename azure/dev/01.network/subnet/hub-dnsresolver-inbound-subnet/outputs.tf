@@ -5,7 +5,7 @@ output "hub_subnet_key" {
 
 output "hub_subnet_id" {
   description = "해당 서브넷 리소스 ID"
-  value       = module.subnet.id
+  value       = module.subnet.resource_id
 }
 
 output "hub_subnet_name" {

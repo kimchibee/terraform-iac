@@ -4,12 +4,12 @@
 
 output "apim_id" {
   description = "API Management ID"
-  value       = module.apim.id
+  value       = module.apim.resource_id
 }
 
 output "apim_gateway_url" {
   description = "API Management gateway URL"
-  value       = module.apim.gateway_url
+  value       = module.apim.apim_gateway_url
 }
 
 output "apim_private_ip_addresses" {

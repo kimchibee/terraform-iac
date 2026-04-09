@@ -64,82 +64,99 @@ data "terraform_remote_state" "compute" {
   }
 }
 
+data "azurerm_client_config" "current" {}
+
+locals {
+  common_tags = merge(var.tags, {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  })
+}
+
 module "monitoring_storage" {
   for_each = local.monitoring_storage_accounts
-  source   = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/storage-account?ref=chore/avm-wave1-modules-prune-and-convert"
+  source   = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-storage-storageaccount?ref=main"
 
   providers = { azurerm = azurerm.hub }
 
-  project_name                  = var.project_name
-  environment                   = var.environment
-  location                      = var.location
+  name                          = substr(lower(replace(each.value, "-", "")), 0, 24)
   resource_group_name           = data.terraform_remote_state.network.outputs.hub_resource_group_name
-  storage_account_name          = substr(lower(replace(each.value, "-", "")), 0, 24)
+  location                      = var.location
+  account_tier                  = "Standard"
+  account_replication_type      = "LRS"
+  min_tls_version               = "TLS1_2"
   public_network_access_enabled = false
-  tags                          = var.tags
+  tags                          = local.common_tags
+  enable_telemetry              = false
+  shared_access_key_enabled     = true
 }
 
 module "monitoring_storage_blob_private_endpoint" {
   for_each = module.monitoring_storage
-  source   = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-wave1-modules-prune-and-convert"
+  source   = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privateendpoint?ref=main"
 
   providers = { azurerm = azurerm.hub }
 
-  project_name         = var.project_name
-  environment          = var.environment
-  name                 = "pe-${each.key}-blob"
-  location             = var.location
-  resource_group_name  = data.terraform_remote_state.network.outputs.hub_resource_group_name
-  subnet_id            = data.terraform_remote_state.hub_pep_subnet.outputs.hub_subnet_id
-  target_resource_id   = each.value.storage_account_id
-  subresource_names    = ["blob"]
-  private_dns_zone_ids = [data.azurerm_private_dns_zone.hub_blob_zone.id]
-  tags                 = var.tags
+  name                            = "pe-${each.key}-blob"
+  location                        = var.location
+  resource_group_name             = data.terraform_remote_state.network.outputs.hub_resource_group_name
+  subnet_resource_id              = data.terraform_remote_state.hub_pep_subnet.outputs.hub_subnet_id
+  network_interface_name          = "nic-pe-${each.key}-blob"
+  private_connection_resource_id  = each.value.resource_id
+  subresource_names               = ["blob"]
+  tags                            = local.common_tags
+  enable_telemetry                = false
+  private_service_connection_name = "psc-pe-${each.key}-blob"
+  private_dns_zone_resource_ids   = [data.azurerm_private_dns_zone.hub_blob_zone.id]
+  private_dns_zone_group_name     = "default"
 }
 
 module "key_vault" {
   count  = var.enable_key_vault ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/key-vault?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-keyvault-vault?ref=main"
 
   providers = { azurerm = azurerm.hub }
 
-  project_name                  = var.project_name
-  environment                   = var.environment
   name                          = local.key_vault_name
   location                      = var.location
   resource_group_name           = data.terraform_remote_state.network.outputs.hub_resource_group_name
+  tenant_id                     = data.azurerm_client_config.current.tenant_id
   public_network_access_enabled = false
+  tags                          = local.common_tags
+  enable_telemetry              = false
   network_acls = {
     default_action             = "Deny"
-    bypass                     = ["AzureServices"]
+    bypass                     = "AzureServices"
     virtual_network_subnet_ids = [data.terraform_remote_state.hub_pep_subnet.outputs.hub_subnet_id]
     ip_rules                   = []
   }
-  tags = var.tags
 }
 
 module "key_vault_private_endpoint" {
   count  = var.enable_key_vault ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privateendpoint?ref=main"
 
   providers = { azurerm = azurerm.hub }
 
-  project_name         = var.project_name
-  environment          = var.environment
-  name                 = "pe-hub-kv"
-  location             = var.location
-  resource_group_name  = data.terraform_remote_state.network.outputs.hub_resource_group_name
-  subnet_id            = data.terraform_remote_state.hub_pep_subnet.outputs.hub_subnet_id
-  target_resource_id   = module.key_vault[0].id
-  subresource_names    = ["vault"]
-  private_dns_zone_ids = [data.azurerm_private_dns_zone.hub_vault_zone.id]
-  tags                 = var.tags
+  name                            = "pe-hub-kv"
+  location                        = var.location
+  resource_group_name             = data.terraform_remote_state.network.outputs.hub_resource_group_name
+  subnet_resource_id              = data.terraform_remote_state.hub_pep_subnet.outputs.hub_subnet_id
+  network_interface_name          = "nic-pe-hub-kv"
+  private_connection_resource_id  = module.key_vault[0].resource_id
+  subresource_names               = ["vault"]
+  tags                            = local.common_tags
+  enable_telemetry                = false
+  private_service_connection_name = "psc-pe-hub-kv"
+  private_dns_zone_resource_ids   = [data.azurerm_private_dns_zone.hub_vault_zone.id]
+  private_dns_zone_group_name     = "default"
 }
 
 resource "azurerm_role_assignment" "monitoring_vm_key_vault_secrets_user" {
   count = var.enable_key_vault && var.enable_monitoring_vm && local.monitoring_vm_principal_id != "" ? 1 : 0
 
-  scope                = module.key_vault[0].id
+  scope                = module.key_vault[0].resource_id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = local.monitoring_vm_principal_id
 }

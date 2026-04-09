@@ -9,7 +9,7 @@ data "terraform_remote_state" "network_spoke" {
 }
 
 module "apim" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/api-management-service?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-apimanagement-service?ref=main"
 
   providers = {
     azurerm = azurerm.spoke
@@ -22,4 +22,5 @@ module "apim" {
   publisher_name      = var.apim_publisher_name
   sku_name            = var.apim_sku_name
   tags                = var.tags
+  enable_telemetry    = false
 }

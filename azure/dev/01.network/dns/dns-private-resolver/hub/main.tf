@@ -60,13 +60,14 @@ data "terraform_remote_state" "hub_dns_inbound_subnet" {
 }
 
 module "dns_private_resolver" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/dns-private-resolver?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-dnsresolver?ref=main"
 
-  name                = "${var.project_name}-x-x-pdr"
-  resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
-  location            = var.location
-  virtual_network_id  = data.terraform_remote_state.hub_vnet.outputs.hub_vnet_id
-  tags                = var.tags
+  name                        = "${var.project_name}-x-x-pdr"
+  resource_group_name         = data.terraform_remote_state.hub_rg.outputs.resource_group_name
+  location                    = var.location
+  virtual_network_resource_id = data.terraform_remote_state.hub_vnet.outputs.hub_vnet_id
+  tags                        = var.tags
+  enable_telemetry            = false
   inbound_endpoints = {
     hub = {
       name        = "hub-dns-inbound"
@@ -76,13 +77,13 @@ module "dns_private_resolver" {
 }
 
 output "dns_private_resolver_id" {
-  value = module.dns_private_resolver.id
+  value = module.dns_private_resolver.resource_id
 }
 
 output "dns_private_resolver_inbound_endpoint_ids" {
-  value = module.dns_private_resolver.inbound_endpoint_ids
+  value = { for k, v in module.dns_private_resolver.inbound_endpoints : k => v.id }
 }
 
 output "dns_private_resolver_inbound_endpoint_ip_addresses" {
-  value = module.dns_private_resolver.inbound_endpoint_ip_addresses
+  value = module.dns_private_resolver.inbound_endpoint_ips
 }

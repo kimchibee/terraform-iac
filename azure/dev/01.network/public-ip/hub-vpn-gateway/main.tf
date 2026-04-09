@@ -40,18 +40,21 @@ data "terraform_remote_state" "hub_rg" {
 }
 
 module "public_ip" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/public-ip?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-publicipaddress?ref=main"
 
   name                = "${var.project_name}-x-x-vpng-pip"
   resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
   location            = var.location
+  allocation_method   = "Static"
+  sku                 = "Standard"
   tags                = var.tags
+  enable_telemetry    = false
 }
 
 output "public_ip_id" {
-  value = module.public_ip.id
+  value = module.public_ip.resource_id
 }
 
 output "public_ip_address" {
-  value = module.public_ip.ip_address
+  value = module.public_ip.public_ip_address
 }

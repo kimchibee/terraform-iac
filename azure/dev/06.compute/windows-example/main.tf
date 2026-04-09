@@ -41,31 +41,74 @@ locals {
   computer_name = "${local.name_prefix}-${var.vm_computer_name_suffix}"
 }
 
+locals {
+  vm_source_image_reference = {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2022-datacenter-azure-edition"
+    version   = "latest"
+  }
+  vm_network_interfaces = {
+    primary = {
+      name = "${local.vm_name}-nic"
+      ip_configurations = {
+        primary = {
+          name                          = "internal"
+          private_ip_subnet_resource_id = local.hub_subnet
+          private_ip_address_allocation = "Dynamic"
+        }
+      }
+      is_primary = true
+      tags       = var.tags
+    }
+  }
+  vm_extensions_map = {
+    for idx, ext in var.vm_extensions : tostring(idx) => {
+      name                       = ext.name
+      publisher                  = ext.publisher
+      type                       = ext.type
+      type_handler_version       = ext.type_handler_version
+      auto_upgrade_minor_version = ext.auto_upgrade_minor_version
+      settings                   = length(keys(ext.settings)) > 0 ? jsonencode(ext.settings) : null
+      protected_settings         = length(keys(ext.protected_settings)) > 0 ? jsonencode(ext.protected_settings) : null
+    }
+  }
+}
+
 module "vm" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-compute-virtualmachine?ref=main"
   count  = var.enable_vm ? 1 : 0
 
   providers = {
     azurerm = azurerm
   }
 
-  name                 = local.vm_name
-  computer_name        = local.computer_name
-  os_type              = "windows"
-  size                 = var.vm_size
-  location             = var.location
-  resource_group_name  = local.hub_rg
-  subnet_id            = local.hub_subnet
-  admin_username       = var.admin_username
-  admin_password       = var.admin_password
-  admin_ssh_public_key = ""
-  tags                 = var.tags
-  enable_identity      = true
-  vm_extensions        = var.vm_extensions
+  name                = local.vm_name
+  resource_group_name = local.hub_rg
+  location            = var.location
+  zone                = "1"
+
+  os_type                = "Windows"
+  sku_size               = var.vm_size
+  source_image_reference = local.vm_source_image_reference
+  network_interfaces     = local.vm_network_interfaces
+  extensions             = local.vm_extensions_map
+
+  admin_username = var.admin_username
+  admin_password = trimspace(var.admin_password) != "" ? var.admin_password : null
+  admin_ssh_keys = []
+
+  managed_identities = {
+    system_assigned            = true
+    user_assigned_resource_ids = []
+  }
+
+  tags             = var.tags
+  enable_telemetry = false
 }
 
 resource "azurerm_network_interface_application_security_group_association" "asg" {
   for_each                      = var.enable_vm && length(local.asg_ids) > 0 ? toset(local.asg_ids) : toset([])
-  network_interface_id          = module.vm[0].network_interface_id
+  network_interface_id          = try(values(module.vm[0].network_interfaces)[0].id, null)
   application_security_group_id = each.value
 }

@@ -77,7 +77,7 @@ locals {
 }
 
 module "route_table" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/route-table?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-routetable?ref=main"
 
   location            = var.location
   name                = "${local.name_prefix}-spoke-udr"
