@@ -44,13 +44,21 @@ data "terraform_remote_state" "hub_pep_subnet" {
 }
 
 data "azurerm_private_dns_zone" "hub_blob_zone" {
+  provider            = azurerm.hub
   name                = "privatelink.blob.core.windows.net"
   resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
 }
 
 data "azurerm_private_dns_zone" "hub_vault_zone" {
+  provider            = azurerm.hub
   name                = "privatelink.vaultcore.azure.net"
   resource_group_name = data.terraform_remote_state.network.outputs.hub_resource_group_name
+}
+
+# tenant_id를 key-vault wrapper에 주입하기 위한 lookup
+# (wrapper는 더 이상 data "azurerm_client_config"를 직접 호출하지 않는다)
+data "azurerm_client_config" "current" {
+  provider = azurerm.hub
 }
 
 data "terraform_remote_state" "compute" {
@@ -66,7 +74,7 @@ data "terraform_remote_state" "compute" {
 
 module "monitoring_storage" {
   for_each = local.monitoring_storage_accounts
-  source   = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/storage-account?ref=chore/avm-wave1-modules-prune-and-convert"
+  source   = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/storage-account?ref=chore/avm-vendoring-and-id-injection"
 
   providers = { azurerm = azurerm.hub }
 
@@ -81,7 +89,7 @@ module "monitoring_storage" {
 
 module "monitoring_storage_blob_private_endpoint" {
   for_each = module.monitoring_storage
-  source   = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-wave1-modules-prune-and-convert"
+  source   = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-vendoring-and-id-injection"
 
   providers = { azurerm = azurerm.hub }
 
@@ -99,7 +107,7 @@ module "monitoring_storage_blob_private_endpoint" {
 
 module "key_vault" {
   count  = var.enable_key_vault ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/key-vault?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/key-vault?ref=chore/avm-vendoring-and-id-injection"
 
   providers = { azurerm = azurerm.hub }
 
@@ -108,6 +116,7 @@ module "key_vault" {
   name                          = local.key_vault_name
   location                      = var.location
   resource_group_name           = data.terraform_remote_state.network.outputs.hub_resource_group_name
+  tenant_id                     = data.azurerm_client_config.current.tenant_id
   public_network_access_enabled = false
   network_acls = {
     default_action             = "Deny"
@@ -120,7 +129,7 @@ module "key_vault" {
 
 module "key_vault_private_endpoint" {
   count  = var.enable_key_vault ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-vendoring-and-id-injection"
 
   providers = { azurerm = azurerm.hub }
 

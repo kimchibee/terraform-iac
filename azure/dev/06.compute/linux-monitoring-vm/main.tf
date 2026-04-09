@@ -55,7 +55,7 @@ resource "local_file" "vm_private_key_pem" {
 }
 
 module "vm" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-machine?ref=chore/avm-vendoring-and-id-injection"
   count  = var.enable_vm ? 1 : 0
 
   providers = {

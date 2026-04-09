@@ -16,7 +16,7 @@ locals {
 }
 
 module "log_analytics_workspace" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=chore/avm-vendoring-and-id-injection"
 
   providers = { azurerm = azurerm.hub }
 

@@ -20,15 +20,14 @@ data "terraform_remote_state" "network_spoke" {
 }
 
 module "vnet_peering_spoke_to_hub" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet-peering?ref=main"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet-peering?ref=chore/avm-vendoring-and-id-injection"
 
   providers = {
     azurerm = azurerm.spoke
   }
 
   name                         = "${data.terraform_remote_state.network_spoke.outputs.spoke_vnet_name}-to-hub"
-  resource_group_name          = data.terraform_remote_state.network_spoke.outputs.spoke_resource_group_name
-  virtual_network_name         = data.terraform_remote_state.network_spoke.outputs.spoke_vnet_name
+  local_virtual_network_id     = data.terraform_remote_state.network_spoke.outputs.spoke_vnet_id
   remote_virtual_network_id    = data.terraform_remote_state.network_hub.outputs.hub_vnet_id
   allow_virtual_network_access = true
   allow_forwarded_traffic      = true

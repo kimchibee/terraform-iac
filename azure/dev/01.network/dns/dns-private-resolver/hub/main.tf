@@ -60,7 +60,7 @@ data "terraform_remote_state" "hub_dns_inbound_subnet" {
 }
 
 module "dns_private_resolver" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/dns-private-resolver?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/dns-private-resolver?ref=chore/avm-vendoring-and-id-injection"
 
   name                = "${var.project_name}-x-x-pdr"
   resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name

@@ -27,15 +27,14 @@ locals {
 }
 
 module "subnet" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/subnet?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/subnet?ref=chore/avm-vendoring-and-id-injection"
 
   providers = {
     azurerm = azurerm.hub
   }
 
   name                      = local.subnet_name
-  resource_group_name       = data.terraform_remote_state.vnet_hub.outputs.hub_resource_group_name
-  virtual_network_name      = data.terraform_remote_state.vnet_hub.outputs.hub_vnet_name
+  virtual_network_id        = data.terraform_remote_state.vnet_hub.outputs.hub_vnet_id
   address_prefixes          = ["10.0.1.0/24"]
   service_endpoints         = ["Microsoft.Storage", "Microsoft.KeyVault"]
   network_security_group_id = data.terraform_remote_state.hub_nsg.outputs.network_security_group_id

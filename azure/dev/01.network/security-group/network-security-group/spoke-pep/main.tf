@@ -64,7 +64,7 @@ locals {
 }
 
 module "network_security_group" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/network-security-group?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/network-security-group?ref=chore/avm-vendoring-and-id-injection"
 
   name                = local.nsg_name
   location            = var.location

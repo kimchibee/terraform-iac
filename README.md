@@ -145,7 +145,8 @@ export BACKEND_CONTAINER="tfstate"
 | **terraform-modules** ([GitHub](https://github.com/kimchibee/terraform-modules)) | **공통 모듈** | AVM 기반 `resource-group`, `vnet`, `subnet`, `private-endpoint`, `api-management-service`, `cognitive-services-account`, `virtual-machine` 등 **재사용 모듈**만 보관. **apply는 하지 않음.** |
 
 - **참조 방식**: terraform-iac의 각 스택은 `source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/모듈명?ref=<branch-or-tag>"` 형태로 **Git 레포만** 참조합니다. 로컬 `modules/` 경로는 사용하지 않습니다.
-- **AVM**: azurerm이 필수인 경우가 아니면 **Azure Verified Module(AVM)** 을 사용합니다.
+- **AVM**: 모든 wrapper는 **Azure Verified Module(AVM)** 을 호출합니다. wrapper 자체에서는 `resource "azurerm_*"` 또는 `data "azurerm_*"`를 직접 호출하지 않습니다(폐쇄망/베스트 프랙티스 원칙).
+- **폐쇄망 운영**: terraform-modules 레포는 `vendor/` 하위에 AVM 18개 레포를 특정 태그로 vendoring해 두었으므로, terraform-iac가 git URL로 terraform-modules를 받아오면 AVM도 함께 따라옵니다. `terraform init` 시 추가로 Terraform Registry에 접근하지 않습니다(provider 다운로드는 별도 mirror 구성 필요).
 - **모듈 버전 업데이트**: terraform-modules 쪽 코드나 `ref`를 바꾼 경우, 해당 스택에서 `terraform init -upgrade` 후 plan/apply
 - **동기화 가이드**: 아키텍처 선배포 환경을 Terraform state로 동기화하는 절차는 `ARCHITECTURE_SYNC_SCENARIO_GUIDE.md` 참고
 
@@ -236,19 +237,36 @@ terraform-iac/
 
 ### 2.4 스택별 azurerm / AVM 참조
 
-- **azurerm (루트/로컬에서 직접)**: 해당 스택의 루트 또는 로컬 모듈에서 `resource "azurerm_*"` / `data "azurerm_*"`를 직접 사용하는지 여부.
-- **AVM (모듈)**: AVM을 통해 모듈을 사용하는지. 데이터 저장·모듈화 등으로 azurerm을 함께 쓰는 경우도 있음.
+- **azurerm (루트/리프에서 직접)**: 해당 스택의 루트(리프 main.tf) 또는 로컬 모듈에서 `resource "azurerm_*"` / `data "azurerm_*"`를 직접 사용하는지 여부.
+- **AVM (모듈)**: AVM을 통해 모듈을 사용하는지. terraform-modules의 wrapper는 모두 vendor된 AVM만 호출하며 azurerm을 직접 호출하지 않음.
 
 | 스택 | azurerm (루트/리프에서 직접) | AVM (모듈) | 현황 비고 |
 |------|:---------------------------:|:----------:|------|
 | **network** | ✅ | ✅ | `security-group/*`, `dns/*`, `subnet/*`, `vnet/*`, `route/*` 리프 조합으로 운영 |
-| **storage** | ✅ | ✅ | `monitoring` 리프에서 AVM wrapper + azurerm data/resource 병행 |
+| **storage** | ✅ | ✅ | `monitoring` 리프에서 AVM wrapper + azurerm data 병행 (key-vault `tenant_id` 주입용 `data azurerm_client_config` 포함) |
 | **shared-services** | ✅ | ✅ | `log-analytics`는 AVM wrapper 중심, `shared`는 운영 리소스 조합 |
 | **apim** | ✅ | ✅ | `api-management-service` 모듈 + 리프 오케스트레이션 |
-| **ai-services** | ✅ | ✅ | `cognitive-services-account`, `private-endpoint` 모듈 + ML Workspace 의존 리소스 직접 관리 |
+| **ai-services** | ✅ | ✅ | `cognitive-services-account` wrapper(Git 모듈로 통합), `private-endpoint` 모듈 + ML Workspace 의존 리소스 직접 관리 |
 | **compute** | ✅ | ✅ | `virtual-machine` 모듈 사용, 리프에서 NIC/ASG/identity 참조 오케스트레이션 |
 | **identity/rbac** | ✅ | ❌ | Entra/Azure RBAC 리소스 직접 관리 (`azuread_*`, `azurerm_role_assignment`) |
 | **connectivity** | ✅ | ✅ | `diagnostics/hub`는 azurerm, `peering/*`는 `vnet-peering` 모듈 |
+
+> **공용 모듈 측 원칙**: terraform-modules 레포 자체에는 `resource "azurerm_*"`도 `data "azurerm_*"`도 0건입니다. 모든 부모 리소스 정보(VNet ID, RG ID, DNS Zone ID, tenant_id 등)는 호출자(terraform-iac 리프)가 명시적으로 ID로 주입합니다. 이 원칙 덕분에 wrapper가 plan-time에 외부 API를 호출하지 않으며, 폐쇄망에서도 안정적으로 동작합니다.
+
+### 2.5 모듈 호출 규약 (ID 주입)
+
+terraform-modules의 6개 wrapper는 부모 리소스를 이름이 아니라 **리소스 ID**로 받습니다. terraform-iac 리프에서 호출 시 다음 인자를 사용해야 합니다.
+
+| Wrapper | 입력 변수 | 주입 예시 |
+|---|---|---|
+| `subnet` | `virtual_network_id` | `data.terraform_remote_state.vnet_hub.outputs.hub_vnet_id` |
+| `vnet-peering` | `local_virtual_network_id`, `remote_virtual_network_id` | `data.terraform_remote_state.network_*.outputs.*_vnet_id` |
+| `private-dns-zone` | `resource_group_id` | `data.terraform_remote_state.hub_rg.outputs.resource_group_id` |
+| `private-dns-zone-vnet-link` | `private_dns_zone_id`, `virtual_network_id` | 각 zone 스택의 `outputs.private_dns_zone_id` + vnet 스택의 `*_vnet_id` |
+| `virtual-network-gateway` | `resource_group_id`, `virtual_network_id`, `subnet_id` | rg/vnet/subnet remote_state |
+| `key-vault` | `tenant_id` (외) | `data "azurerm_client_config" "current" { provider = azurerm.hub }` 후 `tenant_id = data.azurerm_client_config.current.tenant_id` |
+
+> 이전 인터페이스(`virtual_network_name`/`resource_group_name`/`private_dns_zone_name`)는 **제거**되었습니다. 새 호출부 예시는 [`azure/dev/01.network/subnet/hub-pep-subnet/main.tf`](azure/dev/01.network/subnet/hub-pep-subnet/main.tf)와 [`azure/dev/01.network/dns/private-dns-zone-vnet-link/hub-vault-to-hub-vnet/main.tf`](azure/dev/01.network/dns/private-dns-zone-vnet-link/hub-vault-to-hub-vnet/main.tf)를 참고하세요.
 
 ---
 

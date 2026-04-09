@@ -33,11 +33,20 @@ data "terraform_remote_state" "vnet" {
   }
 }
 
-module "link" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-dns-zone-vnet-link?ref=chore/avm-wave1-modules-prune-and-convert"
+data "terraform_remote_state" "zone" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = var.backend_resource_group_name
+    storage_account_name = var.backend_storage_account_name
+    container_name       = var.backend_container_name
+    key                  = "azure/dev/01.network/dns/private-dns-zone/hub-vault/terraform.tfstate"
+  }
+}
 
-  name                  = "hub-vault-to-hub-vnet"
-  resource_group_name   = data.terraform_remote_state.vnet.outputs.hub_resource_group_name
-  private_dns_zone_name = "privatelink.vaultcore.azure.net"
-  virtual_network_id    = data.terraform_remote_state.vnet.outputs.hub_vnet_id
+module "link" {
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-dns-zone-vnet-link?ref=chore/avm-vendoring-and-id-injection"
+
+  name                = "hub-vault-to-hub-vnet"
+  private_dns_zone_id = data.terraform_remote_state.zone.outputs.private_dns_zone_id
+  virtual_network_id  = data.terraform_remote_state.vnet.outputs.hub_vnet_id
 }

@@ -8,7 +8,7 @@ locals {
 }
 
 module "log_analytics_workspace" {
-  source              = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=avm-1.0.0"
+  source              = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/log-analytics-workspace?ref=chore/avm-vendoring-and-id-injection"
   providers           = { azurerm = azurerm }
   name                = local.name
   location            = var.location

@@ -14,6 +14,7 @@ override.tf.json
 terraform.rc
 tfplan
 *.tfplan
+.cursor
 
 # tfvars (민감 정보: 구독 ID, backend 이름 등)
 *.tfvars
@@ -33,6 +34,7 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 

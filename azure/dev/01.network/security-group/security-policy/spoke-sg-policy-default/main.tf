@@ -22,7 +22,7 @@ data "azurerm_resource_group" "spoke" {
 }
 
 module "firewall_policy" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/firewall-policy?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/firewall-policy?ref=chore/avm-vendoring-and-id-injection"
 
   location            = data.azurerm_resource_group.spoke.location
   name                = "${local.name_prefix}-spoke-fwpol"

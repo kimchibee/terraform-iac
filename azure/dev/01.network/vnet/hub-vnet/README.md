@@ -36,5 +36,5 @@ terraform apply -var-file=terraform.tfvars
 예시:
 
 ```hcl
-source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet?ref=chore/avm-wave1-modules-prune-and-convert"
+source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet?ref=chore/avm-vendoring-and-id-injection"
 ```

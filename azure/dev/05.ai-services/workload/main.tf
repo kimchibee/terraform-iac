@@ -77,20 +77,20 @@ locals {
 }
 
 module "openai" {
-  source = "./modules/cognitive-services-account"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/cognitive-services-account?ref=chore/avm-vendoring-and-id-injection"
 
   providers = {
     azurerm = azurerm.spoke
   }
 
-  name                  = local.spoke_openai_name
-  resource_group_id     = data.azurerm_resource_group.spoke.id
-  location              = var.location
-  kind                  = "OpenAI"
-  sku_name              = var.openai_sku
-  cognitive_deployments = local.openai_deployments_map
+  name                          = local.spoke_openai_name
+  resource_group_id             = data.azurerm_resource_group.spoke.id
+  location                      = var.location
+  kind                          = "OpenAI"
+  sku_name                      = var.openai_sku
+  cognitive_deployments         = local.openai_deployments_map
   public_network_access_enabled = false
-  tags                  = var.tags
+  tags                          = var.tags
 }
 
 resource "random_string" "ai_foundry_suffix" {
@@ -157,7 +157,7 @@ resource "azurerm_machine_learning_workspace" "ai_foundry" {
 
 module "openai_private_endpoint" {
   count  = var.enable_private_endpoints ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-vendoring-and-id-injection"
 
   providers = {
     azurerm = azurerm.spoke
@@ -177,7 +177,7 @@ module "openai_private_endpoint" {
 
 module "ai_foundry_private_endpoint" {
   count  = var.enable_private_endpoints && var.enable_ai_foundry_workspace ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-endpoint?ref=chore/avm-vendoring-and-id-injection"
 
   providers = {
     azurerm = azurerm.spoke

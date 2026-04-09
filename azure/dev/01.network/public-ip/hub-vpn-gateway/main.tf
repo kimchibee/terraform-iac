@@ -40,7 +40,7 @@ data "terraform_remote_state" "hub_rg" {
 }
 
 module "public_ip" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/public-ip?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/public-ip?ref=chore/avm-vendoring-and-id-injection"
 
   name                = "${var.project_name}-x-x-vpng-pip"
   resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name

@@ -68,18 +68,29 @@ data "terraform_remote_state" "public_ip" {
   }
 }
 
-module "virtual_network_gateway" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-network-gateway?ref=chore/avm-wave1-modules-prune-and-convert"
+data "terraform_remote_state" "hub_vnet" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = var.backend_resource_group_name
+    storage_account_name = var.backend_storage_account_name
+    container_name       = var.backend_container_name
+    key                  = "azure/dev/01.network/vnet/hub-vnet/terraform.tfstate"
+  }
+}
 
-  name                = "${var.project_name}-x-x-vpng"
-  resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
-  location            = var.location
-  type                = var.vpn_gateway_type
-  vpn_type            = "RouteBased"
-  sku                 = var.vpn_gateway_sku
-  subnet_id           = data.terraform_remote_state.gateway_subnet.outputs.hub_subnet_id
+module "virtual_network_gateway" {
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/virtual-network-gateway?ref=chore/avm-vendoring-and-id-injection"
+
+  name                 = "${var.project_name}-x-x-vpng"
+  resource_group_id    = data.terraform_remote_state.hub_rg.outputs.resource_group_id
+  virtual_network_id   = data.terraform_remote_state.hub_vnet.outputs.hub_vnet_id
+  location             = var.location
+  type                 = var.vpn_gateway_type
+  vpn_type             = "RouteBased"
+  sku                  = var.vpn_gateway_sku
+  subnet_id            = data.terraform_remote_state.gateway_subnet.outputs.hub_subnet_id
   public_ip_address_id = data.terraform_remote_state.public_ip.outputs.public_ip_id
-  tags                = var.tags
+  tags                 = var.tags
 }
 
 output "virtual_network_gateway_id" {

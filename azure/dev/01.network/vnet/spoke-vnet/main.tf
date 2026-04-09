@@ -16,18 +16,18 @@ locals {
 }
 
 module "spoke_vnet" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/vnet?ref=chore/avm-vendoring-and-id-injection"
 
   providers = {
     azurerm = azurerm.spoke
   }
 
-  project_name        = var.project_name
-  environment         = var.environment
-  location            = var.location
-  tags                = var.tags
-  resource_group_name = data.terraform_remote_state.spoke_rg.outputs.resource_group_name
-  vnet_name           = local.spoke_vnet_name
-  vnet_address_space  = var.vnet_address_space
-  subnets             = {}
+  project_name       = var.project_name
+  environment        = var.environment
+  location           = var.location
+  tags               = var.tags
+  resource_group_id  = data.terraform_remote_state.spoke_rg.outputs.resource_group_id
+  vnet_name          = local.spoke_vnet_name
+  vnet_address_space = var.vnet_address_space
+  subnets            = {}
 }

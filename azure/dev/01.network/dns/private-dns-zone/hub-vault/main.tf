@@ -38,11 +38,11 @@ data "terraform_remote_state" "hub_rg" {
 }
 
 module "zone" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-dns-zone?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/private-dns-zone?ref=chore/avm-vendoring-and-id-injection"
 
-  name                = "privatelink.vaultcore.azure.net"
-  resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
-  tags                = var.tags
+  name              = "privatelink.vaultcore.azure.net"
+  resource_group_id = data.terraform_remote_state.hub_rg.outputs.resource_group_id
+  tags              = var.tags
 }
 
 output "private_dns_zone_id" {

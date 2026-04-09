@@ -9,7 +9,7 @@ data "terraform_remote_state" "network_spoke" {
 }
 
 module "apim" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/api-management-service?ref=chore/avm-wave1-modules-prune-and-convert"
+  source = "git::https://github.com/kimchibee/terraform-modules.git//terraform_modules/api-management-service?ref=chore/avm-vendoring-and-id-injection"
 
   providers = {
     azurerm = azurerm.spoke
