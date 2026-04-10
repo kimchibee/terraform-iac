@@ -11,12 +11,57 @@ default:
     - terraform
 
 # -----------------------------------------------------------------------------
+# .ensure-backend-hcl — backend.hcl이 없으면 CI Variables로 생성
+# -----------------------------------------------------------------------------
+.ensure-backend-hcl: &ensure_backend_hcl
+  - |
+    if [ ! -f backend.hcl ]; then
+      echo "backend.hcl 미존재 — CI Variables로 생성"
+      LEAF_KEY="${LEAF_DIR}/terraform.tfstate"
+      cat > backend.hcl <<HCL
+    resource_group_name  = "${BACKEND_RG}"
+    storage_account_name = "${BACKEND_SA}"
+    container_name       = "${BACKEND_CONTAINER}"
+    key                  = "${LEAF_KEY}"
+    HCL
+    fi
+
+# -----------------------------------------------------------------------------
+# .ensure-tfvars — terraform.tfvars가 없으면 CI Variables로 자동 생성
+# -----------------------------------------------------------------------------
+.ensure-tfvars: &ensure_tfvars
+  - |
+    if [ ! -f terraform.tfvars ] && [ ! -f terraform.generated.auto.tfvars ]; then
+      echo "tfvars 미존재 — CI Variables로 생성"
+      OUT="terraform.generated.auto.tfvars"
+      : > "$OUT"
+      for var_pair in \
+        "hub_subscription_id:${HUB_SUBSCRIPTION_ID}" \
+        "spoke_subscription_id:${SPOKE_SUBSCRIPTION_ID}" \
+        "backend_resource_group_name:${BACKEND_RG}" \
+        "backend_storage_account_name:${BACKEND_SA}" \
+        "backend_container_name:${BACKEND_CONTAINER}" \
+        "location:${BACKEND_LOCATION}"; do
+        var_name="${var_pair%%:*}"
+        var_value="${var_pair#*:}"
+        if grep -Rqs "variable[[:space:]]\\+\"${var_name}\"" --include="*.tf" .; then
+          printf '%s = "%s"\n' "$var_name" "$var_value" >> "$OUT"
+        fi
+      done
+      if [ ! -s "$OUT" ]; then
+        rm -f "$OUT"
+      fi
+    fi
+
+# -----------------------------------------------------------------------------
 # .terraform-plan — init + validate + plan, 결과를 artifact로 저장
 # -----------------------------------------------------------------------------
 .terraform-plan:
   script:
     - export ARM_SUBSCRIPTION_ID=$HUB_SUBSCRIPTION_ID
     - cd ${LEAF_DIR}
+    - *ensure_backend_hcl
+    - *ensure_tfvars
     - |
       INIT_OK=0
       for attempt in 1 2 3; do
@@ -46,6 +91,7 @@ default:
       - ${LEAF_DIR}/*.log
       - ${LEAF_DIR}/.terraform/
       - ${LEAF_DIR}/.terraform.lock.hcl
+      - ${LEAF_DIR}/backend.hcl
     expire_in: 7 days
     when: always
 
@@ -56,6 +102,7 @@ default:
   script:
     - export ARM_SUBSCRIPTION_ID=$HUB_SUBSCRIPTION_ID
     - cd ${LEAF_DIR}
+    - *ensure_backend_hcl
     - |
       INIT_OK=0
       for attempt in 1 2 3; do
