@@ -79,6 +79,7 @@ bootstrap:apply:
 # =============================================================================
 prepare:
   stage: prepare
+  needs: []
   variables:
     BACKEND_RG: "terraform-state-rg"
     BACKEND_SA: "tfstatea9911"
