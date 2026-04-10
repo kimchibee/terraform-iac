@@ -38,6 +38,9 @@ default:
       for var_pair in \
         "hub_subscription_id:${HUB_SUBSCRIPTION_ID}" \
         "spoke_subscription_id:${SPOKE_SUBSCRIPTION_ID}" \
+        "project_name:${PROJECT_NAME}" \
+        "environment:${ENVIRONMENT_NAME}" \
+        "name_prefix:${NAME_PREFIX}" \
         "backend_resource_group_name:${BACKEND_RG}" \
         "backend_storage_account_name:${BACKEND_SA}" \
         "backend_container_name:${BACKEND_CONTAINER}" \

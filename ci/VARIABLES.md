@@ -32,6 +32,16 @@ az ad sp create-for-rbac \
 | `HUB_SUBSCRIPTION_ID` | No | Hub 구독 ID — 네트워크, 보안, 모니터링, state backend가 위치하는 구독 |
 | `SPOKE_SUBSCRIPTION_ID` | No | Spoke 구독 ID — APIM, OpenAI, ML 등 워크로드가 위치하는 구독 |
 
+## 프로젝트 (Terraform 공통 변수)
+
+각 leaf의 `variables.tf`에 선언된 공통 변수입니다. 리소스 이름 생성 및 태깅에 사용됩니다.
+
+| Variable | Masked | 설명 |
+|----------|--------|------|
+| `PROJECT_NAME` | No | 프로젝트 이름 (예: `test`) — 리소스 네이밍 프리픽스로 사용 |
+| `ENVIRONMENT_NAME` | No | 환경 이름 (예: `dev`, `prod`) — 태그 및 네이밍에 사용 |
+| `NAME_PREFIX` | No | 리소스 이름 접두사 (예: `test-x-x`) — 일부 스택에서 사용 |
+
 ## Backend (Terraform State 저장소)
 
 Bootstrap에서 생성한 state 백엔드 인프라를 가리킵니다. 모든 leaf의 `backend.hcl`에서 이 값을 사용하여 Terraform state를 원격 저장합니다.
