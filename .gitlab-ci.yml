@@ -19,9 +19,6 @@ variables:
   TF_INPUT: "false"
 
 default:
-  image:
-    name: hashicorp/terraform:${TF_VERSION}
-    entrypoint: [""]
   tags:
     - terraform
 
@@ -82,11 +79,6 @@ bootstrap:apply:
 # =============================================================================
 prepare:
   stage: prepare
-  image:
-    name: alpine:latest
-    entrypoint: [""]
-  before_script:
-    - apk add --no-cache bash findutils
   script:
     - bash scripts/generate-backend-hcl.sh
     - bash ci/build-generated-tfvars.sh
@@ -103,11 +95,6 @@ prepare:
 # =============================================================================
 .generate-template:
   stage: generate
-  image:
-    name: alpine:latest
-    entrypoint: [""]
-  before_script:
-    - apk add --no-cache bash findutils
   needs: ["prepare"]
   artifacts:
     paths:
