@@ -80,11 +80,6 @@ bootstrap:apply:
 prepare:
   stage: prepare
   needs: []
-  variables:
-    BACKEND_RG: "terraform-state-rg"
-    BACKEND_SA: "tfstatea9911"
-    BACKEND_CONTAINER: "tfstate"
-    BACKEND_LOCATION: "Korea Central"
   script:
     # bootstrap/backend/terraform.tfvars는 gitignore 대상이므로 CI에서 생성
     - |
