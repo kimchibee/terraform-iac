@@ -79,11 +79,29 @@ bootstrap:apply:
 # =============================================================================
 prepare:
   stage: prepare
+  variables:
+    BACKEND_RG: "terraform-state-rg"
+    BACKEND_SA: "tfstatea9911"
+    BACKEND_CONTAINER: "tfstate"
+    BACKEND_LOCATION: "Korea Central"
   script:
+    # bootstrap/backend/terraform.tfvars는 gitignore 대상이므로 CI에서 생성
+    - |
+      cat > bootstrap/backend/terraform.tfvars <<TFVARS
+      resource_group_name  = "${BACKEND_RG}"
+      storage_account_name = "${BACKEND_SA}"
+      container_name       = "${BACKEND_CONTAINER}"
+      location             = "${BACKEND_LOCATION}"
+      tags = {
+        ManagedBy = "Terraform"
+        Purpose   = "Terraform-Backend"
+      }
+      TFVARS
     - bash scripts/generate-backend-hcl.sh
     - bash ci/build-generated-tfvars.sh
   artifacts:
     paths:
+      - bootstrap/backend/terraform.tfvars
       - azure/dev/**/backend.hcl
       - azure/dev/**/terraform.generated.auto.tfvars
     expire_in: 1 day
