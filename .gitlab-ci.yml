@@ -115,6 +115,8 @@ prepare:
 .generate-template:
   stage: generate
   needs: ["prepare"]
+  before_script:
+    - mkdir -p ci/generated
   artifacts:
     paths:
       - ci/generated/
