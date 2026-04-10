@@ -1,0 +1,244 @@
+# ------------------------------------------------------------------------------
+# GitLab CI/CD — Terraform IaC Hub/Spoke 순차 배포
+#
+# [필요 CI/CD Variables] Settings → CI/CD → Variables (masked, protected)
+#   ARM_CLIENT_ID         : Azure Service Principal Client ID
+#   ARM_CLIENT_SECRET     : Azure Service Principal Client Secret
+#   ARM_TENANT_ID         : Azure AD Tenant ID
+#   HUB_SUBSCRIPTION_ID   : Hub 구독 ID
+#   SPOKE_SUBSCRIPTION_ID  : Spoke 구독 ID
+#
+# [파이프라인 흐름]
+#   bootstrap (수동,1회) → prepare → generate → stack-01 → ... → stack-09
+#   각 스택은 child pipeline으로 실행되며, wave/leaf별 수동 승인 후 apply
+# ------------------------------------------------------------------------------
+
+variables:
+  TF_VERSION: "1.14.6"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+default:
+  image:
+    name: hashicorp/terraform:${TF_VERSION}
+    entrypoint: [""]
+  tags:
+    - terraform
+
+stages:
+  - bootstrap
+  - prepare
+  - generate
+  - stack-01-network
+  - stack-02-storage
+  - stack-03-shared-services
+  - stack-04-apim
+  - stack-05-ai-services
+  - stack-06-compute
+  - stack-07-identity
+  - stack-08-rbac
+  - stack-09-connectivity
+
+# =============================================================================
+# Bootstrap — Terraform state backend (1회 실행)
+# =============================================================================
+bootstrap:plan:
+  stage: bootstrap
+  variables:
+    ARM_SUBSCRIPTION_ID: $HUB_SUBSCRIPTION_ID
+  script:
+    - cd bootstrap/backend
+    - terraform init -input=false
+    - terraform plan -var-file=terraform.tfvars -input=false -out=tfplan 2>&1 | tee plan.log
+  artifacts:
+    paths:
+      - bootstrap/backend/tfplan
+      - bootstrap/backend/plan.log
+      - bootstrap/backend/.terraform/
+      - bootstrap/backend/.terraform.lock.hcl
+    expire_in: 7 days
+  rules:
+    - when: manual
+      allow_failure: true
+
+bootstrap:apply:
+  stage: bootstrap
+  variables:
+    ARM_SUBSCRIPTION_ID: $HUB_SUBSCRIPTION_ID
+  needs: ["bootstrap:plan"]
+  script:
+    - cd bootstrap/backend
+    - terraform init -input=false
+    - terraform apply -auto-approve tfplan 2>&1 | tee apply.log
+  artifacts:
+    paths:
+      - bootstrap/backend/apply.log
+    expire_in: 7 days
+  when: manual
+  allow_failure: true
+
+# =============================================================================
+# Prepare — backend.hcl 생성 + tfvars 동기화
+# =============================================================================
+prepare:
+  stage: prepare
+  image:
+    name: alpine:latest
+    entrypoint: [""]
+  before_script:
+    - apk add --no-cache bash findutils
+  script:
+    - bash scripts/generate-backend-hcl.sh
+    - bash ci/build-generated-tfvars.sh
+  artifacts:
+    paths:
+      - azure/dev/**/backend.hcl
+      - azure/dev/**/terraform.generated.auto.tfvars
+    expire_in: 1 day
+  rules:
+    - when: on_success
+
+# =============================================================================
+# Generate — 스택별 child pipeline YAML 동적 생성
+# =============================================================================
+.generate-template:
+  stage: generate
+  image:
+    name: alpine:latest
+    entrypoint: [""]
+  before_script:
+    - apk add --no-cache bash findutils
+  needs: ["prepare"]
+  artifacts:
+    paths:
+      - ci/generated/
+    expire_in: 1 day
+
+generate:01-network:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 01.network > ci/generated/01-network.yml
+
+generate:02-storage:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 02.storage > ci/generated/02-storage.yml
+
+generate:03-shared-services:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 03.shared-services > ci/generated/03-shared-services.yml
+
+generate:04-apim:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 04.apim > ci/generated/04-apim.yml
+
+generate:05-ai-services:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 05.ai-services > ci/generated/05-ai-services.yml
+
+generate:06-compute:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 06.compute > ci/generated/06-compute.yml
+
+generate:07-identity:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 07.identity > ci/generated/07-identity.yml
+
+generate:08-rbac:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 08.rbac > ci/generated/08-rbac.yml
+
+generate:09-connectivity:
+  extends: .generate-template
+  script:
+    - bash ci/generate-stack-pipeline.sh 09.connectivity > ci/generated/09-connectivity.yml
+
+# =============================================================================
+# Stack Triggers — child pipeline 순차 실행 (strategy: depend → 완료 대기)
+# =============================================================================
+deploy:01-network:
+  stage: stack-01-network
+  needs: ["generate:01-network"]
+  trigger:
+    include:
+      - artifact: ci/generated/01-network.yml
+        job: generate:01-network
+    strategy: depend
+
+deploy:02-storage:
+  stage: stack-02-storage
+  needs: ["generate:02-storage", "deploy:01-network"]
+  trigger:
+    include:
+      - artifact: ci/generated/02-storage.yml
+        job: generate:02-storage
+    strategy: depend
+
+deploy:03-shared-services:
+  stage: stack-03-shared-services
+  needs: ["generate:03-shared-services", "deploy:02-storage"]
+  trigger:
+    include:
+      - artifact: ci/generated/03-shared-services.yml
+        job: generate:03-shared-services
+    strategy: depend
+
+deploy:04-apim:
+  stage: stack-04-apim
+  needs: ["generate:04-apim", "deploy:03-shared-services"]
+  trigger:
+    include:
+      - artifact: ci/generated/04-apim.yml
+        job: generate:04-apim
+    strategy: depend
+
+deploy:05-ai-services:
+  stage: stack-05-ai-services
+  needs: ["generate:05-ai-services", "deploy:04-apim"]
+  trigger:
+    include:
+      - artifact: ci/generated/05-ai-services.yml
+        job: generate:05-ai-services
+    strategy: depend
+
+deploy:06-compute:
+  stage: stack-06-compute
+  needs: ["generate:06-compute", "deploy:05-ai-services"]
+  trigger:
+    include:
+      - artifact: ci/generated/06-compute.yml
+        job: generate:06-compute
+    strategy: depend
+
+deploy:07-identity:
+  stage: stack-07-identity
+  needs: ["generate:07-identity", "deploy:06-compute"]
+  trigger:
+    include:
+      - artifact: ci/generated/07-identity.yml
+        job: generate:07-identity
+    strategy: depend
+
+deploy:08-rbac:
+  stage: stack-08-rbac
+  needs: ["generate:08-rbac", "deploy:07-identity"]
+  trigger:
+    include:
+      - artifact: ci/generated/08-rbac.yml
+        job: generate:08-rbac
+    strategy: depend
+
+deploy:09-connectivity:
+  stage: stack-09-connectivity
+  needs: ["generate:09-connectivity", "deploy:08-rbac"]
+  trigger:
+    include:
+      - artifact: ci/generated/09-connectivity.yml
+        job: generate:09-connectivity
+    strategy: depend
