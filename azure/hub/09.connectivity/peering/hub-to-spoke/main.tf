@@ -1,5 +1,5 @@
 module "vnet_peering_hub_to_spoke" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-virtualnetwork-v0.17.1/modules/peering?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-virtualnetwork-main.git//modules/peering?ref=main"
 
   providers = {
     azurerm = azurerm.hub

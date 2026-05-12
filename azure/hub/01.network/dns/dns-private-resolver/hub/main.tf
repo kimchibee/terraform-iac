@@ -1,5 +1,5 @@
 module "dns_private_resolver" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-dnsresolver?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-dnsresolver-main.git?ref=main"
 
   name                        = "${var.project_name}-x-x-pdr"
   resource_group_name         = data.terraform_remote_state.hub_rg.outputs.resource_group_name

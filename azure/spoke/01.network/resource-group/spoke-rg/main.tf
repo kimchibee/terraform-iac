@@ -1,5 +1,5 @@
 module "resource_group" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-resources-resourcegroup?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-resources-resourcegroup-main.git?ref=main"
 
   name             = local.spoke_resource_group_name
   location         = var.location

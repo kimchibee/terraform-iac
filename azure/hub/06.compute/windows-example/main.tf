@@ -1,5 +1,5 @@
 module "vm" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-compute-virtualmachine?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-compute-virtualmachine-main.git?ref=main"
   count  = var.enable_vm ? 1 : 0
 
   providers = {

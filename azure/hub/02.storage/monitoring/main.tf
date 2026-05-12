@@ -1,6 +1,6 @@
 module "monitoring_storage" {
   for_each = local.monitoring_storage_accounts
-  source   = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-storage-storageaccount?ref=main"
+  source   = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-storage-storageaccount-main.git?ref=main"
 
   providers = { azurerm = azurerm.hub }
 
@@ -18,7 +18,7 @@ module "monitoring_storage" {
 
 module "monitoring_storage_blob_private_endpoint" {
   for_each = module.monitoring_storage
-  source   = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privateendpoint?ref=main"
+  source   = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-privateendpoint-main.git?ref=main"
 
   providers = { azurerm = azurerm.hub }
 
@@ -38,7 +38,7 @@ module "monitoring_storage_blob_private_endpoint" {
 
 module "key_vault" {
   count  = var.enable_key_vault ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-keyvault-vault?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-keyvault-vault-main.git?ref=main"
 
   providers = { azurerm = azurerm.hub }
 
@@ -59,7 +59,7 @@ module "key_vault" {
 
 module "key_vault_private_endpoint" {
   count  = var.enable_key_vault ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privateendpoint?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-privateendpoint-main.git?ref=main"
 
   providers = { azurerm = azurerm.hub }
 

@@ -1,5 +1,5 @@
 module "virtual_network_gateway" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-ptn-vnetgateway?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-ptn-vnetgateway-main.git?ref=main"
 
   parent_id = data.azurerm_resource_group.parent.id
   name      = "${var.project_name}-x-x-vpng"

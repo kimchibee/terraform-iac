@@ -1,5 +1,5 @@
 module "zone" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privatednszone?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-privatednszone-main.git?ref=main"
 
   domain_name      = "privatelink.notebooks.azure.net"
   parent_id        = data.azurerm_resource_group.parent.id

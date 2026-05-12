@@ -1,5 +1,5 @@
 module "firewall_policy" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-firewallpolicy?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-firewallpolicy-main.git?ref=main"
 
   location            = data.azurerm_resource_group.spoke.location
   name                = "${local.name_prefix}-spoke-fwpol"

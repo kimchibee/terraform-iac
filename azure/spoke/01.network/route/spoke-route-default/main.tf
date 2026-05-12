@@ -1,5 +1,5 @@
 module "route_table" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-routetable?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-routetable-main.git?ref=main"
 
   location            = var.location
   name                = "${local.name_prefix}-spoke-udr"

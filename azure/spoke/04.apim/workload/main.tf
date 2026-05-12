@@ -1,5 +1,5 @@
 module "apim" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-apimanagement-service?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-apimanagement-service-main.git?ref=main"
 
   providers = {
     azurerm = azurerm.spoke

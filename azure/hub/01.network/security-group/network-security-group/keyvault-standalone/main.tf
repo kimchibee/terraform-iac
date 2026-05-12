@@ -1,6 +1,6 @@
 module "network_security_group" {
   count  = var.enabled ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-networksecuritygroup?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-networksecuritygroup-main.git?ref=main"
 
   name                = local.nsg_name
   location            = data.terraform_remote_state.hub_rg.outputs.location

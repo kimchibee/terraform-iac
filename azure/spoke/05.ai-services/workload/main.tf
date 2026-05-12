@@ -79,7 +79,7 @@ resource "azurerm_machine_learning_workspace" "ai_foundry" {
 
 module "openai_private_endpoint" {
   count  = var.enable_private_endpoints ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privateendpoint?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-privateendpoint-main.git?ref=main"
 
   providers = {
     azurerm = azurerm.spoke
@@ -101,7 +101,7 @@ module "openai_private_endpoint" {
 
 module "ai_foundry_private_endpoint" {
   count  = var.enable_private_endpoints && var.enable_ai_foundry_workspace ? 1 : 0
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-privateendpoint?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-privateendpoint-main.git?ref=main"
 
   providers = {
     azurerm = azurerm.spoke

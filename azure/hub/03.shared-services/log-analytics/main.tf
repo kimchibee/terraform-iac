@@ -1,5 +1,5 @@
 module "log_analytics_workspace" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-operationalinsights-workspace?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-operationalinsights-workspace-main.git?ref=main"
 
   providers = { azurerm = azurerm.hub }
 

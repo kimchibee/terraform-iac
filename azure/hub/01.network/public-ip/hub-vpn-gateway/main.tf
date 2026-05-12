@@ -1,5 +1,5 @@
 module "public_ip" {
-  source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-publicipaddress?ref=main"
+  source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-publicipaddress-main.git?ref=main"
 
   name                = "${var.project_name}-x-x-vpng-pip"
   resource_group_name = data.terraform_remote_state.hub_rg.outputs.resource_group_name
