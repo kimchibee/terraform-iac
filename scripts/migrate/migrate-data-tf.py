@@ -17,7 +17,8 @@ with MAPPING_FILE.open() as f:
         LEAF_TO_TRUNK[src] = trunk
 
 def leaf_path_from_key(key_value):
-    m = re.match(r'azure/dev/(.+)/terraform\.tfstate$', key_value)
+    # 이미 변환된 키(azure/dev/{hub|spoke}/...)도 인식하여 idempotent하게 동작
+    m = re.match(r'azure/dev/(?:(?:hub|spoke)/)?(.+)/terraform\.tfstate$', key_value)
     if not m:
         return None
     return m.group(1)
