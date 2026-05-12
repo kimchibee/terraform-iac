@@ -252,7 +252,9 @@ while IFS=$'\t' read -r src_path trunk; do
   fi
 
   mkdir -p "$dst_parent"
-  git mv "$src" "$dst"
+  # `git mv`는 tracked file만 옮기지만, terraform.tfvars 등은 .gitignore라 untracked.
+  # 일반 `mv`로 디렉터리 통째로 이동시킨 후 `git add azure/`에서 tracked 변경을 감지.
+  mv "$src" "$dst"
   echo "MOVED: $src -> $dst"
 done < "$MAPPING"
 ```
