@@ -50,21 +50,6 @@ variable "enable_pep_nsg" {
 }
 
 # Backend Configuration (for remote_state)
-variable "backend_resource_group_name" {
-  description = "Backend storage account resource group name"
-  type        = string
-}
-
-variable "backend_storage_account_name" {
-  description = "Backend storage account name"
-  type        = string
-}
-
-variable "backend_container_name" {
-  description = "Backend container name"
-  type        = string
-  default     = "tfstate"
-}
 
 # API Management Variables
 variable "apim_sku_name" {
@@ -83,4 +68,19 @@ variable "apim_publisher_email" {
   description = "API Management publisher email"
   type        = string
   default     = "platform@example.com"
+}
+
+variable "spoke_backend_resource_group_name" {
+  type        = string
+  description = "Spoke 구독의 Terraform state storage가 위치한 resource group 이름"
+}
+
+variable "spoke_backend_storage_account_name" {
+  type        = string
+  description = "Spoke 구독의 Terraform state storage account 이름"
+}
+
+variable "spoke_backend_container_name" {
+  type        = string
+  description = "Spoke 구독의 Terraform state storage container 이름"
 }

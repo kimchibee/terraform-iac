@@ -23,19 +23,6 @@ variable "spoke_subscription_id" {
   type = string
 }
 
-variable "backend_resource_group_name" {
-  type = string
-}
-
-variable "backend_storage_account_name" {
-  type = string
-}
-
-variable "backend_container_name" {
-  type    = string
-  default = "tfstate"
-}
-
 variable "use_securitygroup_prereq" {
   description = "Use security group and ASG remote-state prerequisites when true."
   type        = bool
@@ -96,4 +83,19 @@ variable "vm_access_target_nsg_ids_extra" {
 variable "vm_access_destination_ports" {
   type    = list(string)
   default = ["22", "3389"]
+}
+
+variable "hub_backend_resource_group_name" {
+  type        = string
+  description = "Hub 구독의 Terraform state storage가 위치한 resource group 이름"
+}
+
+variable "hub_backend_storage_account_name" {
+  type        = string
+  description = "Hub 구독의 Terraform state storage account 이름"
+}
+
+variable "hub_backend_container_name" {
+  type        = string
+  description = "Hub 구독의 Terraform state storage container 이름"
 }

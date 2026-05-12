@@ -35,22 +35,6 @@ variable "spoke_subscription_id" {
   type        = string
 }
 
-variable "backend_resource_group_name" {
-  description = "Backend storage account resource group name"
-  type        = string
-}
-
-variable "backend_storage_account_name" {
-  description = "Backend storage account name"
-  type        = string
-}
-
-variable "backend_container_name" {
-  description = "Backend container name"
-  type        = string
-  default     = "tfstate"
-}
-
 # Hub Network Variables
 variable "hub_vnet_address_space" {
   description = "Hub VNet address space"
@@ -132,4 +116,19 @@ variable "create_hub_resource_group" {
   description = "true면 Hub RG를 hub-vnet 모듈에서 생성. 새 구조에서는 `01.network/resource-group/hub-rg` 선행 후 false 사용이 기본."
   type        = bool
   default     = false
+}
+
+variable "hub_backend_resource_group_name" {
+  type        = string
+  description = "Hub 구독의 Terraform state storage가 위치한 resource group 이름"
+}
+
+variable "hub_backend_storage_account_name" {
+  type        = string
+  description = "Hub 구독의 Terraform state storage account 이름"
+}
+
+variable "hub_backend_container_name" {
+  type        = string
+  description = "Hub 구독의 Terraform state storage container 이름"
 }
