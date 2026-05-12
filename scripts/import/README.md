@@ -66,11 +66,24 @@ source scripts/import/env.sh
 # → "Subscription | TenantId" 표 출력되면 OK
 
 # 4) state SA 접근 확인 (plan Task 0.1 Step 5)
+#    cross-tenant(Lighthouse 등) 시 --auth-mode login 이 "issuer did not match" 401 을
+#    낼 수 있음 → 권장은 account-key 방식 (아래 4-A). 토큰 issuer 오류가 보이면 4-B 실행.
+
+# 4-A) 권장: control-plane 으로 storage 존재 확인 + account-key 로 data-plane 확인
+export ARM_ACCESS_KEY="$(az storage account keys list \
+  --resource-group "$TF_BACKEND_RG" \
+  --account-name "$TF_BACKEND_SA" \
+  --query '[0].value' -o tsv)"
+
 az storage container show \
   --name "$TF_BACKEND_CONTAINER" \
   --account-name "$TF_BACKEND_SA" \
-  --auth-mode login \
+  --account-key "$ARM_ACCESS_KEY" \
   --query '{name:name}' -o table
+
+# 4-B) "issuer did not match" 401 발생 시 원인 진단
+./scripts/import/diagnose-storage-auth.sh
+# → token tid vs storage subscription tenant 비교, 가설 자동 판정
 
 # 5) 인벤토리 추출 (plan Task 0.2 Step 2)
 ./scripts/import/az-inventory.sh
@@ -99,6 +112,7 @@ az storage container show \
 |---|---|---|
 | `env.sh` | 공통 환경변수 export (subscription, backend SA, REPO_ROOT 등). SP 변수 우선 인식 | 작업 시작 시 `source` |
 | `az-sp-login.sh` | ARM_* env vars 로 az CLI SP 인증 | env.sh source 직후 1회 |
+| `diagnose-storage-auth.sh` | storage data-plane AAD 인증 오류("issuer did not match" 등) 진단. 토큰 tid vs storage subscription tenant 비교 후 자동 판정 | 401/issuer 오류 발생 시 |
 | `az-inventory.sh` | `az resource list` → `docs/import/inventory.json` + `inventory.csv` | Phase 0 인벤토리 추출 |
 | `leaf-list.sh` | azure/ 하위 모든 leaf (main.tf 디렉토리) 나열 | 매핑 CSV 초안 작성 시 |
 | `tf-backend-key.sh` | leaf 경로 → state backend key 변환 (`azure/dev/<...>/terraform.tfstate`) | 다른 스크립트가 호출 |
