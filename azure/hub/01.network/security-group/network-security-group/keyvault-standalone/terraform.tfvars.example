@@ -1,17 +1,24 @@
+# terraform.tfvars.example
+#
+# 사용법:
+#   1) 이 파일을 terraform.tfvars로 복사
+#   2) <PLACEHOLDER> 부분을 실제 값으로 교체
+#   3) hub_subscription_id, spoke_subscription_id는 본 파일에 두지 않음 —
+#      환경변수로 주입: export TF_VAR_hub_subscription_id=...
+#                       export TF_VAR_spoke_subscription_id=...
+#   4) backend 설정은 별도 backend.hcl 파일을 사용:
+#      terraform init -backend-config=backend.hcl
+#
 # 프로젝트 접두어 (리소스명 prefix): 예) "test"
 project_name = "test"
 
 # Hub에 사용할 Azure 구독 ID (GUID)
-hub_subscription_id = "f6e816bf-6df7-4fb5-953c-12507dc60879"
 
 # 원격 state 저장소의 리소스 그룹명 (bootstrap/backend와 동일)
-backend_resource_group_name = "terraform-state-rg"
 
 # 원격 state 저장소의 스토리지 계정명 (bootstrap/backend와 동일)
-backend_storage_account_name = "tfstate7dc60879"
 
 # 원격 state 컨테이너명 (기본값: tfstate)
-backend_container_name = "tfstate"
 
 # NSG 생성 여부 (true 권장)
 enabled = true
@@ -24,3 +31,7 @@ tags = {
   ManagedBy = "Terraform"
   Environment = "dev"
 }
+
+hub_backend_resource_group_name  = "terraform-state-rg"
+hub_backend_storage_account_name = "tfstatea9911"
+hub_backend_container_name       = "tfstate"

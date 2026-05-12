@@ -1,3 +1,14 @@
+# terraform.tfvars.example
+#
+# 사용법:
+#   1) 이 파일을 terraform.tfvars로 복사
+#   2) <PLACEHOLDER> 부분을 실제 값으로 교체
+#   3) hub_subscription_id, spoke_subscription_id는 본 파일에 두지 않음 —
+#      환경변수로 주입: export TF_VAR_hub_subscription_id=...
+#                       export TF_VAR_spoke_subscription_id=...
+#   4) backend 설정은 별도 backend.hcl 파일을 사용:
+#      terraform init -backend-config=backend.hcl
+#
 #--------------------------------------------------------------
 # Log Analytics 리프 변수
 #--------------------------------------------------------------
@@ -12,8 +23,6 @@ tags = {
   Project     = "Azure-Hub-Spoke"
 }
 
-hub_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-
-backend_resource_group_name  = "terraform-state-rg"
-backend_storage_account_name = "tfstate07dc60"
-backend_container_name       = "tfstate"
+hub_backend_resource_group_name  = "terraform-state-rg"
+hub_backend_storage_account_name = "tfstatea9911"
+hub_backend_container_name       = "tfstate"

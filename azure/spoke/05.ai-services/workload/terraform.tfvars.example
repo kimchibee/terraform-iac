@@ -1,3 +1,14 @@
+# terraform.tfvars.example
+#
+# 사용법:
+#   1) 이 파일을 terraform.tfvars로 복사
+#   2) <PLACEHOLDER> 부분을 실제 값으로 교체
+#   3) hub_subscription_id, spoke_subscription_id는 본 파일에 두지 않음 —
+#      환경변수로 주입: export TF_VAR_hub_subscription_id=...
+#                       export TF_VAR_spoke_subscription_id=...
+#   4) backend 설정은 별도 backend.hcl 파일을 사용:
+#      terraform init -backend-config=backend.hcl
+#
 #--------------------------------------------------------------
 # AI Services Stack Variables
 #--------------------------------------------------------------
@@ -14,13 +25,8 @@ tags = {
 }
 
 # Subscription
-spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-hub_subscription_id   = "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
 
 # Backend (Bootstrap의 terraform.tfvars와 동일하게 맞출 것)
-backend_resource_group_name  = "terraform-state-rg"
-backend_storage_account_name = "tfstate07dc60"
-backend_container_name       = "tfstate"
 
 # ---------------------------------------------------------------------------
 # Azure OpenAI 모델 배포 — 쿼터 승인 전에는 비활성화(빈 목록), 승인 후 수정 필요
@@ -43,3 +49,11 @@ enable_private_endpoints    = true
 #   { name = "gpt-4o-mini", model_name = "gpt-4o-mini", version = "2024-07-18", capacity = 10 }
 #   { name = "gpt-35-turbo", model_name = "gpt-35-turbo", version = "0613",     capacity = 10 }
 # ]
+
+hub_backend_resource_group_name  = "terraform-state-rg"
+hub_backend_storage_account_name = "tfstatea9911"
+hub_backend_container_name       = "tfstate"
+
+spoke_backend_resource_group_name  = "<SPOKE_STATE_RG>"
+spoke_backend_storage_account_name = "<SPOKE_STATE_STORAGE_ACCOUNT>"
+spoke_backend_container_name       = "tfstate"

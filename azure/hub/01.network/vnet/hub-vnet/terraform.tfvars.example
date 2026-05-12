@@ -15,8 +15,6 @@ tags = {
 }
 
 # Subscriptions
-hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
 # Hub Network
 hub_vnet_address_space = ["10.0.0.0/20"]
@@ -70,3 +68,7 @@ enable_dns_forwarding_ruleset = false
 
 # 보안 규칙과 연결은 `../application-security-group/*`, `../network-security-group/*`,
 # `../network-security-rule/*`, `../subnet-network-security-group-association/*` 리프에서 관리
+
+hub_backend_resource_group_name  = "terraform-state-rg"
+hub_backend_storage_account_name = "tfstatea9911"
+hub_backend_container_name       = "tfstate"
