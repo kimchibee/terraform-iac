@@ -1,0 +1,9 @@
+project_name  = "test"
+environment   = "dev"
+hub_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+backend_resource_group_name  = "terraform-state-rg"
+backend_storage_account_name = "tfstate07dc60"
+backend_container_name       = "tfstate"
+# iam_role_assignments = [
+#   { principal_id = "xxx", role_definition_name = "Key Vault Secrets User", scope_ref = "storage_key_vault_id", use_spoke_provider = false },
+# ]

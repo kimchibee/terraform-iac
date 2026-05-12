@@ -1,0 +1,20 @@
+variable "project_name" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "location" {
+  type = string
+}
+
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
+
+variable "hub_subscription_id" {
+  type = string
+}

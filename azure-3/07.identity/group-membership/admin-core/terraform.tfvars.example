@@ -1,0 +1,5 @@
+project_name  = "test"
+environment   = "dev"
+tags          = { Environment = "dev", ManagedBy = "Terraform" }
+group_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+member_object_ids = []

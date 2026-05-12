@@ -54,3 +54,6 @@ scripts/logs/
 
 # GitLab Runner 빌드 디렉토리
 builds/
+
+# 아카이브
+*.zip

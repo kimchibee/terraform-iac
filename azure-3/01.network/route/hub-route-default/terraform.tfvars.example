@@ -1,0 +1,21 @@
+project_name  = "test"
+environment   = "dev"
+location      = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+}
+
+hub_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# backend_resource_group_name  = "..."
+# backend_storage_account_name = "..."
+# backend_container_name       = "tfstate"
+
+# associate_route_table_to_monitoring_subnet = true
+
+# NVA 경유 Spoke 대역:
+# enable_route_to_spoke_vnet = true
+# spoke_route_next_hop_type  = "VirtualAppliance"
+# spoke_route_next_hop_ip    = "10.0.2.4"

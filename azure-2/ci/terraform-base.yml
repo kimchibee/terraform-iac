@@ -1,0 +1,43 @@
+# CI 템플릿 — backend.hcl + plan/apply 정의
+# CI Variables 필요: BACKEND_RG, BACKEND_SA, BACKEND_CONTAINER, ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, HUB_SUBSCRIPTION_ID, SPOKE_SUBSCRIPTION_ID
+
+.terraform-plan:
+  stage: plan
+  script:
+    - cd ${LEAF_DIR}
+    - |
+      LEAF_KEY="${LEAF_DIR}/terraform.tfstate"
+      cat > backend.hcl <<HCL
+      resource_group_name  = "${BACKEND_RG}"
+      storage_account_name = "${BACKEND_SA}"
+      container_name       = "${BACKEND_CONTAINER}"
+      key                  = "${LEAF_KEY}"
+      HCL
+    - terraform init -backend-config=backend.hcl -input=false
+    - terraform plan -input=false -out=tfplan 2>&1 | tee plan.log
+  artifacts:
+    paths:
+      - ${LEAF_DIR}/tfplan
+      - ${LEAF_DIR}/.terraform/
+      - ${LEAF_DIR}/.terraform.lock.hcl
+      - ${LEAF_DIR}/plan.log
+      - ${LEAF_DIR}/backend.hcl
+    expire_in: 7 days
+
+.terraform-approve:
+  stage: approve
+  script:
+    - echo "Manual approval required"
+  when: manual
+  allow_failure: false
+
+.terraform-apply:
+  stage: apply
+  script:
+    - cd ${LEAF_DIR}
+    - terraform init -backend-config=backend.hcl -input=false
+    - terraform apply -auto-approve tfplan 2>&1 | tee apply.log
+  artifacts:
+    paths:
+      - ${LEAF_DIR}/apply.log
+    expire_in: 7 days

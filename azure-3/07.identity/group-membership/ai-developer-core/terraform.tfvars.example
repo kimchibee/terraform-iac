@@ -1,0 +1,4 @@
+project_name  = "test"
+environment   = "dev"
+group_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+member_object_ids = []

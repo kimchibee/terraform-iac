@@ -1,0 +1,17 @@
+# 프로젝트 접두어 (리소스명 prefix): 예) "test"
+project_name = "test"
+
+# 환경명 접미어: 예) "dev", "prod"
+environment = "dev"
+
+# Hub 리소스를 배포할 Azure 리전: 예) "Korea Central"
+location = "Korea Central"
+
+# Hub에 사용할 Azure 구독 ID (GUID)
+hub_subscription_id = "f6e816bf-6df7-4fb5-953c-12507dc60879"
+
+# 공통 태그 (필요 시 key/value 추가)
+tags = {
+  ManagedBy = "Terraform"
+  Environment = "dev"
+}

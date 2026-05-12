@@ -1,0 +1,19 @@
+# cp terraform.tfvars.example terraform.tfvars 후 수정
+project_name = "test"
+environment  = "dev"
+location     = "Korea Central"
+
+tags = {
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Project     = "Azure-Hub-Spoke"
+}
+
+hub_subscription_id   = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+spoke_subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+backend_resource_group_name  = "terraform-state-rg"
+backend_storage_account_name = "tfstate07dc60"
+backend_container_name       = "tfstate"
+
+# application_security_group_keys = ["keyvault_clients", "vm_allowed_clients"]
