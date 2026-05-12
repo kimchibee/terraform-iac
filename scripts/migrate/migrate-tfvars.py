@@ -38,7 +38,7 @@ EXAMPLE_HEADER = '''# terraform.tfvars.example
 #
 '''
 
-EXAMPLE_HEADER_MARKER = '# terraform.tfvars.example'
+EXAMPLE_HEADER_MARKER = 'export TF_VAR_hub_subscription_id'
 
 def remove_keys(text, keys):
     lines = text.splitlines(keepends=True)
