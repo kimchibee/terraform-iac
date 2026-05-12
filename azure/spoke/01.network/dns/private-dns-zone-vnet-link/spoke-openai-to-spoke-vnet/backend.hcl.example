@@ -1,0 +1,14 @@
+# backend.hcl.example — Spoke leaf 전용
+#
+# 사용법:
+#   1) 이 파일을 backend.hcl로 복사 (backend.hcl은 .gitignore 대상)
+#   2) <PLACEHOLDER> 부분을 spoke 구독의 실제 값으로 교체
+#   3) terraform init -backend-config=backend.hcl
+#
+# Spoke 구독의 state storage에 저장됨.
+
+resource_group_name  = "<SPOKE_STATE_RG>"
+storage_account_name = "<SPOKE_STATE_STORAGE_ACCOUNT>"
+container_name       = "tfstate"
+key                  = "azure/dev/spoke/01.network/dns/private-dns-zone-vnet-link/spoke-openai-to-spoke-vnet/terraform.tfstate"
+use_azuread_auth     = false

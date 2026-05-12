@@ -1,0 +1,13 @@
+# backend.hcl.example — Hub leaf 전용
+#
+# 사용법:
+#   1) 이 파일을 backend.hcl로 복사 (backend.hcl은 .gitignore 대상)
+#   2) terraform init -backend-config=backend.hcl
+#
+# Hub 구독의 state storage에 저장됨.
+
+resource_group_name  = "terraform-state-rg"
+storage_account_name = "tfstatea9911"
+container_name       = "tfstate"
+key                  = "azure/dev/hub/08.rbac/authorization/hub-assignments/terraform.tfstate"
+use_azuread_auth     = false
