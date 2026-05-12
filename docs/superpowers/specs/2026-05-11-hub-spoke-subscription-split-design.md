@@ -20,6 +20,7 @@
 - 61개 leaf를 hub/spoke 양 트리로 물리적으로 재배치한다.
 - 각 leaf가 자신의 backend(자신의 구독 storage)와 cross-state 참조(상대 구독 storage)를 모두 다룰 수 있도록 변수 인터페이스를 분리한다.
 - 구독 ID는 환경변수 주입으로 전환하여 tfvars에 평문으로 저장하지 않는다.
+- AVM 모듈 `source` URL을 외부 GitHub(`kimchibee/terraform-modules`)에서 내부 GitLab(`dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/`)으로 일괄 마이그레이션한다.
 - `terraform init -backend=false && terraform validate`가 모든 leaf에서 통과한다.
 
 ### 비목표
@@ -195,8 +196,9 @@ data "terraform_remote_state" "hub_rg" {
 7. 모든 `terraform.tfvars.example` 상단에 환경변수 주입 안내 주석 추가
 8. 각 leaf에 `backend.hcl.example` 작성 (hub/spoke 트리별 템플릿)
 9. `.gitignore`에 `**/backend.hcl` 추가 (이미 있으면 확인)
-10. 각 leaf에서 `terraform init -backend=false && terraform validate` 실행하여 정합성 검증
-11. 작업 PR로 묶어 커밋
+10. 모든 `main.tf`의 `source = "git::https://github.com/kimchibee/terraform-modules.git//avm/..."` 라인을 9절 매핑표대로 내부 GitLab URL로 일괄 치환
+11. 각 leaf에서 `terraform init -backend=false && terraform validate` 실행하여 정합성 검증
+12. 작업 PR로 묶어 커밋
 
 ## 7. 영향 범위와 위험
 
@@ -213,8 +215,87 @@ data "terraform_remote_state" "hub_rg" {
 - 모든 `terraform.tfvars`에 `subscription_id`, `_subscription_id` 문자열이 등장하지 않음
 - 모든 `data.tf`의 state key가 `azure/dev/hub/` 또는 `azure/dev/spoke/` 접두로 시작
 - `azure/ci/`, `azure/script/` 디렉터리가 존재하지 않음
+- 모든 `main.tf`에 `github.com/kimchibee/terraform-modules` 문자열이 0회 등장
+- 모든 `main.tf`의 `source` 라인이 `dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/` 접두를 사용
 
-## 9. 미확정/이후 작업 (범위 외)
+## 9. 모듈 소스 GitLab 마이그레이션
+
+### 9.1 변환 규칙
+
+```
+Before: git::https://github.com/kimchibee/terraform-modules.git//avm/<MODULE>(<VERSION_SUFFIX>?)(<SUBPATH>?)?ref=main
+After:  git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/<MODULE_BASE>-main.git(<SUBPATH>?)?ref=main
+```
+
+핵심:
+- 호스트/그룹 prefix 교체
+- 경로 중간 `//avm/` 제거
+- 모듈 base 이름 뒤에 버전 접미사(`-v0.7.1`, `-v0.17.1`)가 있으면 제거
+- 모듈 base 이름 뒤에 `-main`을 붙이고 `.git` 추가
+- submodule 경로(`/modules/<sub>`)는 `.git//modules/<sub>` 형태로 유지
+- `?ref=main`은 그대로 유지
+
+### 9.2 매핑표 (17개 고유 GitLab 레포 → 19개 사용 처)
+
+기존 GitHub `//avm/` 이하 경로 → 새 GitLab URL (호스트/그룹 prefix `git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/` 생략)
+
+| 기존 `//avm/` 이하 | 새 (prefix 생략) |
+|---|---|
+| `terraform-azurerm-avm-res-resources-resourcegroup` | `terraform-azurerm-avm-res-resources-resourcegroup-main.git` |
+| `terraform-azurerm-avm-res-network-virtualnetwork-v0.7.1` | `terraform-azurerm-avm-res-network-virtualnetwork-main.git` |
+| `terraform-azurerm-avm-res-network-virtualnetwork-v0.17.1/modules/subnet` | `terraform-azurerm-avm-res-network-virtualnetwork-main.git//modules/subnet` |
+| `terraform-azurerm-avm-res-network-virtualnetwork-v0.17.1/modules/peering` | `terraform-azurerm-avm-res-network-virtualnetwork-main.git//modules/peering` |
+| `terraform-azurerm-avm-res-network-routetable` | `terraform-azurerm-avm-res-network-routetable-main.git` |
+| `terraform-azurerm-avm-res-network-publicipaddress` | `terraform-azurerm-avm-res-network-publicipaddress-main.git` |
+| `terraform-azurerm-avm-ptn-vnetgateway` | `terraform-azurerm-avm-ptn-vnetgateway-main.git` |
+| `terraform-azurerm-avm-res-network-applicationsecuritygroup` | `terraform-azurerm-avm-res-network-applicationsecuritygroup-main.git` |
+| `terraform-azurerm-avm-res-network-networksecuritygroup` | `terraform-azurerm-avm-res-network-networksecuritygroup-main.git` |
+| `terraform-azurerm-avm-res-network-firewallpolicy` | `terraform-azurerm-avm-res-network-firewallpolicy-main.git` |
+| `terraform-azurerm-avm-res-network-privatednszone` | `terraform-azurerm-avm-res-network-privatednszone-main.git` |
+| `terraform-azurerm-avm-res-network-privatednszone/modules/private_dns_virtual_network_link` | `terraform-azurerm-avm-res-network-privatednszone-main.git//modules/private_dns_virtual_network_link` |
+| `terraform-azurerm-avm-res-network-privateendpoint` | `terraform-azurerm-avm-res-network-privateendpoint-main.git` |
+| `terraform-azurerm-avm-res-network-dnsresolver` | `terraform-azurerm-avm-res-network-dnsresolver-main.git` |
+| `terraform-azurerm-avm-res-storage-storageaccount` | `terraform-azurerm-avm-res-storage-storageaccount-main.git` |
+| `terraform-azurerm-avm-res-keyvault-vault` | `terraform-azurerm-avm-res-keyvault-vault-main.git` |
+| `terraform-azurerm-avm-res-operationalinsights-workspace` | `terraform-azurerm-avm-res-operationalinsights-workspace-main.git` |
+| `terraform-azurerm-avm-res-compute-virtualmachine` | `terraform-azurerm-avm-res-compute-virtualmachine-main.git` |
+| `terraform-azurerm-avm-res-apimanagement-service` | `terraform-azurerm-avm-res-apimanagement-service-main.git` |
+
+총 19개 사용 패턴 → 17개 고유 GitLab 레포로 통합 (virtualnetwork 부모+2 submodule, privatednszone 부모+1 submodule).
+
+### 9.3 변환 예시 (전후 비교)
+
+```hcl
+# Before
+source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-resources-resourcegroup?ref=main"
+
+# After
+source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-resources-resourcegroup-main.git?ref=main"
+```
+
+```hcl
+# Before (submodule)
+source = "git::https://github.com/kimchibee/terraform-modules.git//avm/terraform-azurerm-avm-res-network-virtualnetwork-v0.17.1/modules/subnet?ref=main"
+
+# After (submodule)
+source = "git::https://dev-gitlab.kis.zone/platform-division/platform-engine/fortress/azure/azure/terraform-azurerm-avm-res-network-virtualnetwork-main.git//modules/subnet?ref=main"
+```
+
+### 9.4 호환성 (v0.7.1 ↔ v0.17.1 단일화)
+
+기존 코드는 부모 `virtualnetwork`에 `v0.7.1`을, submodule(`subnet`, `peering`)에 `v0.17.1`을 분리 사용했다. GitLab의 `terraform-azurerm-avm-res-network-virtualnetwork-main` 단일 레포가 두 호출 그룹과 모두 호환됨이 운영자에 의해 사전 확인되어, 부모 모듈과 submodule 모두 동일 URL prefix로 매핑한다. 호출부 코드 갱신은 불필요.
+
+- 부모 모듈 호출 leaf: `azure/{hub,spoke}/01.network/vnet/{hub-vnet, spoke-vnet}` 2개
+- submodule 호출 leaf: subnet 11개 + peering 2개
+
+`terraform init` + `terraform validate`로 사후 검증은 여전히 수행한다.
+
+### 9.5 인증
+
+- 사용자/CI 환경이 `dev-gitlab.kis.zone`에 git clone 권한을 보유한다고 가정 (SSH 키 또는 GitLab token이 ~/.gitconfig 또는 git credential helper에 구성됨).
+- 인증 설정 자체는 본 spec 범위 외 (운영자가 별도 구성).
+
+## 10. 미확정/이후 작업 (범위 외)
 
 - Spoke 구독 ID 실제 값 — 운영자가 환경변수로 제공
 - Spoke 구독의 state storage account 생성 — 운영자 별도 수행
