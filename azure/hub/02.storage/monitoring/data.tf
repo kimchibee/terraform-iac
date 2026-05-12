@@ -1,30 +1,30 @@
 data "terraform_remote_state" "network" {
   backend = "azurerm"
   config = {
-    resource_group_name  = var.backend_resource_group_name
-    storage_account_name = var.backend_storage_account_name
-    container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/vnet/hub-vnet/terraform.tfstate"
+    resource_group_name  = var.hub_backend_resource_group_name
+    storage_account_name = var.hub_backend_storage_account_name
+    container_name       = var.hub_backend_container_name
+    key                  = "azure/dev/hub/01.network/vnet/hub-vnet/terraform.tfstate"
   }
 }
 
 data "terraform_remote_state" "hub_monitoring_subnet" {
   backend = "azurerm"
   config = {
-    resource_group_name  = var.backend_resource_group_name
-    storage_account_name = var.backend_storage_account_name
-    container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/subnet/hub-monitoring-vm-subnet/terraform.tfstate"
+    resource_group_name  = var.hub_backend_resource_group_name
+    storage_account_name = var.hub_backend_storage_account_name
+    container_name       = var.hub_backend_container_name
+    key                  = "azure/dev/hub/01.network/subnet/hub-monitoring-vm-subnet/terraform.tfstate"
   }
 }
 
 data "terraform_remote_state" "hub_pep_subnet" {
   backend = "azurerm"
   config = {
-    resource_group_name  = var.backend_resource_group_name
-    storage_account_name = var.backend_storage_account_name
-    container_name       = var.backend_container_name
-    key                  = "azure/dev/01.network/subnet/hub-pep-subnet/terraform.tfstate"
+    resource_group_name  = var.hub_backend_resource_group_name
+    storage_account_name = var.hub_backend_storage_account_name
+    container_name       = var.hub_backend_container_name
+    key                  = "azure/dev/hub/01.network/subnet/hub-pep-subnet/terraform.tfstate"
   }
 }
 
@@ -42,10 +42,10 @@ data "terraform_remote_state" "compute" {
   count   = local.use_compute_remote_state ? 1 : 0
   backend = "azurerm"
   config = {
-    resource_group_name  = var.backend_resource_group_name
-    storage_account_name = var.backend_storage_account_name
-    container_name       = var.backend_container_name
-    key                  = "azure/dev/06.compute/linux-monitoring-vm/terraform.tfstate"
+    resource_group_name  = var.hub_backend_resource_group_name
+    storage_account_name = var.hub_backend_storage_account_name
+    container_name       = var.hub_backend_container_name
+    key                  = "azure/dev/hub/06.compute/linux-monitoring-vm/terraform.tfstate"
   }
 }
 
