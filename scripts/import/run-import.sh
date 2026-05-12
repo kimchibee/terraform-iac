@@ -15,7 +15,12 @@ echo "[run-import] $LEAF — init"
 echo "[run-import] $LEAF — plan"
 cd "$REPO_ROOT/$LEAF"
 PLAN_OUT=$(terraform plan -out=plan.out -input=false -no-color 2>&1)
-SUMMARY=$(echo "$PLAN_OUT" | grep -E '^Plan: ' | head -1)
+SUMMARY=$(echo "$PLAN_OUT" | grep -E '^Plan: ' | head -1 || true)
+if [[ -z "$SUMMARY" ]]; then
+  # "No changes." 등 Plan: 라인이 없는 경우 (이미 import 완료 상태일 수 있음)
+  SUMMARY=$(echo "$PLAN_OUT" | grep -E '^(No changes|Error)' | head -1 || true)
+  [[ -z "$SUMMARY" ]] && SUMMARY="unknown-plan-output"
+fi
 echo "  $SUMMARY"
 
 # "0 to change, 0 to destroy" 확인
