@@ -1,8 +1,14 @@
-# 00.state-backend — Terraform state backend 부트스트랩
+# 00.state-backend — Terraform state backend 부트스트랩 (단일 SA 모드)
 
-다른 모든 leaf 들이 state 파일을 저장할 Azure Storage Account 를 Terraform 으로 생성하는
-**1회용 bootstrap 스택**. `backend.tf` 가 없어 자기 자신의 state 는 **로컬 파일**
+다른 모든 leaf 들이 state 파일을 저장할 **단일** Azure Storage Account 를 Terraform 으로
+생성하는 **1회용 bootstrap 스택**. `backend.tf` 가 없어 자기 자신의 state 는 **로컬 파일**
 (`./terraform.tfstate`) 로 보관된다.
+
+> **모드 선택**:
+> - 이 스택 (`azure/00.state-backend/`) — **단일 SA** 하나에 hub/spoke 양쪽 state 를 담는다 (현재 production: `tfstatea9911`)
+> - `azure/hub/00.state-backend/` + `azure/spoke/00.state-backend/` — **분리 SA** 각 측면 별도. 구독 분리, 권한/blast-radius 분리 시나리오
+>
+> 두 모드는 leaf 의 `*_backend_storage_account_name` 변수 값이 어느 SA 를 가리키느냐로 결정된다. 단일 SA 모드를 쓰던 곳에서 분리로 전환하려면 leaf tfvars 의 backend 이름 일괄 변경 + state 마이그레이션 필요.
 
 ## 언제 실행하나
 
