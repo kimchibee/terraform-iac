@@ -1,0 +1,23 @@
+# 00.state-backend tfvars
+# `cp terraform.tfvars.example terraform.tfvars` 후 subscription_id 입력.
+# `*.tfvars` 는 .gitignore 대상이라 실제 파일은 커밋되지 않음.
+
+# 필수: state backend 를 생성할 Azure 구독 ID
+subscription_id = "20e3a0f3-f1af-4cc5-8092-dc9b276a9911"
+
+# 아래는 기본값. 다른 값이 필요할 때만 주석 해제:
+#
+# location              = "Korea Central"
+# resource_group_name   = "terraform-state-rg"
+#
+# storage_account_name 은 글로벌 unique. 기본값이 이미 사용 중이면 다른 이름으로 변경하고
+# scripts/import/env.sh 의 TF_BACKEND_SA 도 같은 값으로 맞출 것.
+# storage_account_name  = "tfstatea9911"
+#
+# container_name         = "tfstate"
+# enable_blob_versioning = true
+#
+# tags = {
+#   ManagedBy = "Terraform"
+#   Purpose   = "tfstate"
+# }

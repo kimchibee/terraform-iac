@@ -13,6 +13,7 @@
 - Azure CLI (`az`) 설치, `jq` 설치
 - Service Principal 자격증명 (Contributor + Storage Blob Data Contributor + Directory.Read.All)
 - 인터넷 접근 (terraform-modules git source 다운로드)
+- **state backend storage account 존재** — 없으면 `azure/00.state-backend/` 부트스트랩 스택을 먼저 실행 (해당 README 참조)
 
 ---
 
@@ -47,6 +48,10 @@ scripts/import/run-all-stacks.sh
 ## 3. 작업 시퀀스 (az login 없이)
 
 ```bash
+# 0) (최초 1회) state backend 가 없으면 부트스트랩
+#    cd azure/00.state-backend && terraform init && terraform apply
+#    상세: azure/00.state-backend/README.md
+
 # 1) 레포 clone (또는 파일 복사)
 git clone git@github.com:kimchibee/terraform-iac.git
 cd terraform-iac
