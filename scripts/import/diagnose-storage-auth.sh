@@ -1,139 +1,319 @@
 #!/usr/bin/env bash
-# Storage data-plane AAD 인증 오류
-# ("www-authenticate header validation failed, issuer did not match") 진단
+# Storage account 접근/RBAC 진단 + 부족 권한 부여 명령 생성
 #
 # Pre-condition:
 #   - scripts/import/env.sh 가 source 되어 있음
-#   - scripts/import/az-sp-login.sh 가 한 번 실행되어 az 세션이 있는 상태
+#   - scripts/import/az-sp-login.sh 가 실행되어 az 세션이 있는 상태 (없어도 일부 출력은 가능)
 #
-# 출력:
-#   1. 현재 az 세션 정보 (sub, tenant, identity)
-#   2. Storage account 가 속한 구독과 그 구독의 AAD tenant
-#   3. storage 데이터플레인용 OAuth 토큰의 iss/tid/aud
-#   4. ARM_*/SUBSCRIPTION_ID env vars
-#   5. 자동 비교 결과: token tid vs storage subscription tenant
+# 진단 흐름:
+#   [1] 현재 인증 신원 (account + Object ID + principal type)
+#   [2] Storage account 존재 / control-plane 접근 확인
+#   [3] (선택) Storage subscription tenant — issuer 불일치 비교용
+#   [4] (선택) Data-plane 토큰 decode (iss/tid)
+#   [5] 현재 신원의 RBAC 권한 분석 (SA scope, 상속 포함)
+#   [6] 부족 권한 판정 + 관리자에게 보낼 부여 명령 출력
 set -uo pipefail
 
 : "${TF_BACKEND_SA:?env.sh 를 먼저 source 하세요}"
 : "${TF_BACKEND_RG:?env.sh 를 먼저 source 하세요}"
+: "${AZ_SUB:?env.sh 를 먼저 source 하세요}"
 
-hr() { printf '%s\n' "----------------------------------------------------------------------"; }
+# Scope ID 사전 구성 (storage account show 가 실패해도 RBAC 조회는 가능)
+SUB_SCOPE="/subscriptions/$AZ_SUB"
+RG_SCOPE="${SUB_SCOPE}/resourceGroups/${TF_BACKEND_RG}"
+SA_SCOPE="${RG_SCOPE}/providers/Microsoft.Storage/storageAccounts/${TF_BACKEND_SA}"
+
+hr()    { printf '%s\n' "----------------------------------------------------------------------"; }
 title() { printf '\n[%s] %s\n' "$1" "$2"; hr; }
 
-# ─── 1. 현재 az 세션 ──────────────────────────────────────────────────────
-title 1/5 "현재 az 세션"
-if ! az account show \
-  --query '{subscription:name, subscription_id:id, tenant:tenantId, identity:user.name, type:user.type}' \
-  -o json 2>/dev/null; then
-  echo "ERROR: az 세션 없음. scripts/import/az-sp-login.sh 를 먼저 실행하세요."
+# ──────────────────────────────────────────────────────────────────────────
+# [1] 현재 인증 신원
+# ──────────────────────────────────────────────────────────────────────────
+title 1/6 "현재 az 세션 신원"
+ACCOUNT_JSON=$(az account show -o json 2>/dev/null || true)
+if [[ -z "$ACCOUNT_JSON" ]]; then
+  echo "ERROR: az 세션 없음. ./scripts/import/az-sp-login.sh 를 먼저 실행하세요."
   exit 1
 fi
 
-# ─── 2. Storage subscription 의 tenant ────────────────────────────────────
-title 2/5 "Storage account 와 그 구독의 tenant"
-SA_ID=$(az storage account show \
-  -n "$TF_BACKEND_SA" -g "$TF_BACKEND_RG" \
-  --query id -o tsv 2>/dev/null || true)
+CURRENT_SUB=$(echo "$ACCOUNT_JSON"     | jq -r '.id')
+CURRENT_TENANT=$(echo "$ACCOUNT_JSON"  | jq -r '.tenantId')
+CURRENT_USER_NAME=$(echo "$ACCOUNT_JSON" | jq -r '.user.name')
+CURRENT_USER_TYPE=$(echo "$ACCOUNT_JSON" | jq -r '.user.type')
 
-if [[ -z "$SA_ID" ]]; then
-  echo "ERROR: storage account '$TF_BACKEND_SA' (RG=$TF_BACKEND_RG) 조회 실패"
-  echo "       SP 가 해당 storage account 의 control-plane 권한(Reader 이상)이 있어야 함"
-  exit 2
-fi
+echo "subscription   : $(echo "$ACCOUNT_JSON" | jq -r '.name') ($CURRENT_SUB)"
+echo "tenant         : $CURRENT_TENANT"
+echo "identity       : $CURRENT_USER_NAME"
+echo "identity type  : $CURRENT_USER_TYPE"
 
-SA_SUB=$(echo "$SA_ID" | awk -F/ '{print $3}')
-echo "storage_account_id   = $SA_ID"
-echo "storage_subscription = $SA_SUB"
+# 현재 신원의 Object ID + 표시명 + principal type (RBAC 부여/조회의 키)
+ASSIGNEE_OID=""
+ASSIGNEE_DISPLAY=""
+ASSIGNEE_TYPE=""
+case "$CURRENT_USER_TYPE" in
+  servicePrincipal)
+    # az login --service-principal 일 때 user.name == Application/Client ID
+    SP_CLIENT_ID="$CURRENT_USER_NAME"
+    ASSIGNEE_OID=$(az ad sp show --id "$SP_CLIENT_ID" --query id -o tsv 2>/dev/null || true)
+    SP_DISPLAY=$(az ad sp show --id "$SP_CLIENT_ID" --query displayName -o tsv 2>/dev/null || echo "(displayName 조회 실패)")
+    if [[ -z "$ASSIGNEE_OID" ]]; then
+      echo "WARN : Graph API 차단으로 Object ID 조회 실패. ARM_CLIENT_ID 를 그대로 assignee 로 사용."
+      ASSIGNEE_OID="$SP_CLIENT_ID"   # az role assignment list 는 ClientID 도 받음 (Graph 호출 필요)
+    fi
+    ASSIGNEE_DISPLAY="$SP_DISPLAY"
+    ASSIGNEE_TYPE="ServicePrincipal"
+    echo "Service Principal:"
+    echo "  Client ID    : $SP_CLIENT_ID"
+    echo "  Object ID    : $ASSIGNEE_OID"
+    echo "  Display Name : $SP_DISPLAY"
+    ;;
+  user)
+    ASSIGNEE_OID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
+    ASSIGNEE_DISPLAY="$CURRENT_USER_NAME"
+    ASSIGNEE_TYPE="User"
+    echo "User account:"
+    echo "  UPN          : $CURRENT_USER_NAME"
+    echo "  Object ID    : ${ASSIGNEE_OID:-<조회 실패>}"
+    ;;
+  *)
+    echo "WARN : 알 수 없는 identity type ($CURRENT_USER_TYPE) — principal-type 을 ServicePrincipal 로 가정"
+    ASSIGNEE_OID="$CURRENT_USER_NAME"
+    ASSIGNEE_DISPLAY="$CURRENT_USER_NAME"
+    ASSIGNEE_TYPE="ServicePrincipal"
+    ;;
+esac
 
-STORAGE_TENANT=$(az account list \
-  --query "[?id=='$SA_SUB'].tenantId" -o tsv 2>/dev/null || true)
-if [[ -z "$STORAGE_TENANT" ]]; then
-  echo "WARN: 'az account list' 에 storage 구독이 보이지 않음 (Lighthouse delegation 일 수 있음)"
-  echo "     관리 포털 또는 'az account list --refresh' 로 확인 필요"
+# ──────────────────────────────────────────────────────────────────────────
+# [2] Storage account 존재 / control-plane 접근
+# ──────────────────────────────────────────────────────────────────────────
+title 2/6 "Storage account control-plane 접근"
+SA_SHOW_OUT=$(az storage account show \
+  -n "$TF_BACKEND_SA" -g "$TF_BACKEND_RG" --subscription "$AZ_SUB" \
+  -o json 2>&1 || true)
+
+SA_ACCESS="UNKNOWN"
+if echo "$SA_SHOW_OUT" | grep -qi "ResourceNotFound\|was not found"; then
+  echo "✗ Storage account '$TF_BACKEND_SA' 가 RG '$TF_BACKEND_RG' 에 존재하지 않음"
+  echo "  → env.sh 의 TF_BACKEND_SA / TF_BACKEND_RG 또는 AZ_SUB 값 확인 필요"
+  SA_ACCESS="NOT_FOUND"
+elif echo "$SA_SHOW_OUT" | grep -qi "AuthorizationFailed\|does not have authorization\|Forbidden"; then
+  echo "✗ Storage account 조회 권한 없음 (Reader 이상 필요)"
+  echo "  현재 identity ($ASSIGNEE_DISPLAY) 에 SA 또는 RG/구독 scope 의 Reader 가 없음"
+  SA_ACCESS="NO_PERMISSION"
+elif echo "$SA_SHOW_OUT" | jq -e '.id' >/dev/null 2>&1; then
+  echo "✓ Storage account 조회 성공"
+  echo "$SA_SHOW_OUT" | jq '{id, kind, location, allowSharedKeyAccess, allowBlobPublicAccess}'
+  SA_ACCESS="OK"
 else
-  echo "storage_tenant       = $STORAGE_TENANT"
+  echo "✗ 조회 실패 (원인 분류 불가). 원본 응답:"
+  echo "$SA_SHOW_OUT" | head -5
+  SA_ACCESS="ERROR"
 fi
 
-# ─── 3. Storage 데이터플레인 토큰의 iss/tid/aud ────────────────────────────
-title 3/5 "Storage data-plane 토큰 디코드 (https://storage.azure.com/)"
+# ──────────────────────────────────────────────────────────────────────────
+# [3] Storage subscription 의 tenant (issuer 비교용)
+# ──────────────────────────────────────────────────────────────────────────
+title 3/6 "Storage subscription 의 tenant"
+STORAGE_TENANT=$(az account list \
+  --query "[?id=='$AZ_SUB'].tenantId" -o tsv 2>/dev/null || true)
+if [[ -n "$STORAGE_TENANT" ]]; then
+  echo "storage subscription tenant = $STORAGE_TENANT"
+else
+  echo "WARN: 'az account list' 에 구독 미노출 (Lighthouse 위임 가능성)"
+fi
+
+# ──────────────────────────────────────────────────────────────────────────
+# [4] Data-plane 토큰 decode
+# ──────────────────────────────────────────────────────────────────────────
+title 4/6 "Storage data-plane 토큰 decode"
 TOKEN=$(az account get-access-token \
   --resource https://storage.azure.com/ \
   --query accessToken -o tsv 2>/dev/null || true)
-
+TOKEN_TID=""
 if [[ -z "$TOKEN" ]]; then
-  echo "ERROR: storage scope 토큰 발급 실패. SP 가 storage data-plane 권한이 없거나"
-  echo "       AAD 구성 문제일 수 있음."
-  TOKEN_TID=""
+  echo "ERROR: storage scope 토큰 발급 실패"
 else
-  # JWT payload = 두 번째 segment. base64url → base64, 패딩 보정 후 디코드.
-  PAYLOAD="${TOKEN#*.}"
-  PAYLOAD="${PAYLOAD%.*}"
-  PAYLOAD="${PAYLOAD//-/+}"
-  PAYLOAD="${PAYLOAD//_//}"
+  PAYLOAD="${TOKEN#*.}"; PAYLOAD="${PAYLOAD%.*}"
+  PAYLOAD="${PAYLOAD//-/+}"; PAYLOAD="${PAYLOAD//_//}"
   case $((${#PAYLOAD} % 4)) in
     2) PAYLOAD="${PAYLOAD}==" ;;
     3) PAYLOAD="${PAYLOAD}=" ;;
   esac
   DECODED=$(echo "$PAYLOAD" | base64 -d 2>/dev/null || true)
-  if [[ -z "$DECODED" ]]; then
-    echo "ERROR: JWT payload 디코드 실패 (base64 호환성 문제일 수 있음)"
-    TOKEN_TID=""
-  else
-    if command -v jq >/dev/null 2>&1; then
-      echo "$DECODED" | jq '{iss, tid, aud, appid, oid, upn, idtyp}'
-      TOKEN_TID=$(echo "$DECODED" | jq -r '.tid // empty')
-    else
-      echo "$DECODED"
-      TOKEN_TID=$(echo "$DECODED" | grep -oE '"tid":"[^"]+"' | cut -d'"' -f4 || true)
-    fi
+  if [[ -n "$DECODED" ]]; then
+    echo "$DECODED" | jq '{iss, tid, aud, appid, oid, upn}' 2>/dev/null || echo "$DECODED"
+    TOKEN_TID=$(echo "$DECODED" | jq -r '.tid // empty' 2>/dev/null)
   fi
 fi
 
-# ─── 4. ARM_* / SUBSCRIPTION_ID env vars ─────────────────────────────────
-title 4/5 "환경변수 상태"
-printf "ARM_TENANT_ID        = %s\n" "${ARM_TENANT_ID:-<unset>}"
-printf "ARM_SUBSCRIPTION_ID  = %s\n" "${ARM_SUBSCRIPTION_ID:-<unset>}"
-printf "ARM_CLIENT_ID        = %s\n" "${ARM_CLIENT_ID:+<set:${#ARM_CLIENT_ID} chars>}${ARM_CLIENT_ID:-<unset>}"
-printf "ARM_CLIENT_SECRET    = %s\n" "${ARM_CLIENT_SECRET:+<set:${#ARM_CLIENT_SECRET} chars>}${ARM_CLIENT_SECRET:-<unset>}"
-printf "HUB_SUBSCRIPTION_ID  = %s\n" "${HUB_SUBSCRIPTION_ID:-<unset>}"
-printf "SPOKE_SUBSCRIPTION_ID= %s\n" "${SPOKE_SUBSCRIPTION_ID:-<unset>}"
-printf "AZ_SUB (env.sh)      = %s\n" "${AZ_SUB:-<unset>}"
+# ──────────────────────────────────────────────────────────────────────────
+# [5] 현재 신원의 RBAC 권한 분석 (SA scope, 상속 포함)
+# ──────────────────────────────────────────────────────────────────────────
+title 5/6 "RBAC 권한 분석 — '$ASSIGNEE_DISPLAY' 이 storage 에 갖는 권한"
 
-# ─── 5. 자동 비교 / 판정 ──────────────────────────────────────────────────
-title 5/5 "자동 비교 / 가설 판정"
+RA_OUT=$(az role assignment list \
+  --assignee "$ASSIGNEE_OID" \
+  --scope "$SA_SCOPE" \
+  --include-inherited \
+  -o json 2>&1 || true)
 
-VERDICT="UNKNOWN"
-if [[ -n "$TOKEN_TID" && -n "$STORAGE_TENANT" ]]; then
-  if [[ "$TOKEN_TID" == "$STORAGE_TENANT" ]]; then
-    VERDICT="MATCH"
-    echo "✓ Token tid ($TOKEN_TID) == storage subscription tenant"
-    echo "  → issuer 불일치는 아님. 다른 원인 가능성:"
-    echo "    • SP 가 storage 에 'Storage Blob Data *' RBAC 미보유 → 403 가 떠야 정상이지만 401 도 가능"
-    echo "    • Storage account 의 'Allow Azure AD authorization' 설정 비활성"
-    echo "    • Network ACL 로 IP 차단"
+RBAC_QUERY_OK="false"
+DIRECT_ROLES=""    # SA scope 에 직접 부여
+RG_ROLES=""        # RG 상속
+SUB_ROLES=""       # 구독 상속
+MG_ROLES=""        # Management Group 상속
+
+if echo "$RA_OUT" | grep -qi "HTTPSConnectionPool\|Max retries"; then
+  echo "✗ 네트워크 오류 (graph.microsoft.com 또는 management.azure.com 도달 실패)"
+  echo "  → 사내 방화벽/프록시 확인 또는 'curl -m5 https://management.azure.com' 으로 도달성 확인"
+elif echo "$RA_OUT" | grep -qi "AuthorizationFailed"; then
+  echo "✗ RBAC 조회 권한 자체가 없음 (보통 Reader 라도 있으면 자기 권한 조회는 가능)"
+elif echo "$RA_OUT" | jq -e 'type=="array"' >/dev/null 2>&1; then
+  RBAC_QUERY_OK="true"
+  COUNT=$(echo "$RA_OUT" | jq 'length')
+  echo "총 role assignment 수 (상속 포함): $COUNT"
+  echo ""
+
+  if [[ "$COUNT" -gt 0 ]]; then
+    echo "$RA_OUT" | jq -r --arg sa "$SA_SCOPE" --arg rg "$RG_SCOPE" --arg sub "$SUB_SCOPE" '
+      .[] |
+      if   .scope == $sa  then "[SA  direct ] \(.roleDefinitionName)"
+      elif .scope == $rg  then "[RG  상속    ] \(.roleDefinitionName)"
+      elif .scope == $sub then "[SUB 상속    ] \(.roleDefinitionName)"
+      elif (.scope | startswith("/providers/Microsoft.Management")) then
+                              "[MG  상속    ] \(.roleDefinitionName)  ← \(.scope)"
+      else                    "[기타        ] \(.roleDefinitionName)  ← \(.scope)"
+      end
+    '
+
+    DIRECT_ROLES=$(echo "$RA_OUT" | jq -r --arg sa "$SA_SCOPE" '[.[] | select(.scope==$sa) | .roleDefinitionName] | join(",")')
+    RG_ROLES=$(echo     "$RA_OUT" | jq -r --arg rg "$RG_SCOPE" '[.[] | select(.scope==$rg) | .roleDefinitionName] | join(",")')
+    SUB_ROLES=$(echo    "$RA_OUT" | jq -r --arg sub "$SUB_SCOPE" '[.[] | select(.scope==$sub) | .roleDefinitionName] | join(",")')
   else
-    VERDICT="MISMATCH"
-    echo "✗ Token tid ≠ storage subscription tenant — 가설 H1/H2 확정"
-    echo "  Token tid       : $TOKEN_TID"
-    echo "  Storage tenant  : $STORAGE_TENANT"
-    echo ""
-    echo "  해석:"
-    if [[ -n "${ARM_TENANT_ID:-}" && "$ARM_TENANT_ID" != "$STORAGE_TENANT" ]]; then
-      echo "    • ARM_TENANT_ID ($ARM_TENANT_ID) 는 SP 의 home tenant"
-      echo "    • storage 구독은 다른 tenant ($STORAGE_TENANT) 에 있음"
-      echo "    • Cross-tenant (Lighthouse/B2B) 시나리오 — data-plane AAD 인증 불가"
-    fi
-    echo ""
-    echo "  권장 워크어라운드: ARM_ACCESS_KEY 사용 (control-plane 으로 키 fetch → 데이터플레인은 키)"
-    echo "    export ARM_ACCESS_KEY=\"\$(az storage account keys list \\"
-    echo "      -g \"\$TF_BACKEND_RG\" -n \"\$TF_BACKEND_SA\" --query '[0].value' -o tsv)\""
-    echo "    az storage container show -n \"\$TF_BACKEND_CONTAINER\" -n \"\$TF_BACKEND_SA\" \\"
-    echo "      --account-key \"\$ARM_ACCESS_KEY\" --query '{name:name}' -o table"
+    echo "  (이 신원에 storage 관련 권한이 SA / RG / 구독 어디에도 없음)"
   fi
 else
-  echo "WARN: 비교 불가 (토큰 또는 storage tenant 조회 실패)"
-  echo "      위 1~3 섹션 출력을 직접 확인하세요."
+  echo "✗ 조회 실패 — 원본 응답 (앞 5줄):"
+  echo "$RA_OUT" | head -5
 fi
 
+# ──────────────────────────────────────────────────────────────────────────
+# [6] 부족 권한 판정 + 부여 명령 생성
+# ──────────────────────────────────────────────────────────────────────────
+title 6/6 "부족 권한 판정 + 부여 명령"
+
+# 어떤 role 이 있으면 어떤 작업이 가능한지
+ALL_ROLES="${DIRECT_ROLES},${RG_ROLES},${SUB_ROLES},${MG_ROLES}"
+has_role() { echo "$ALL_ROLES" | tr ',' '\n' | grep -qxF "$1"; }
+
+CAN_READ_SA="false"        # az storage account show
+CAN_LIST_KEYS="false"      # az storage account keys list (= state backend 가능)
+CAN_DATA_PLANE_AAD="false" # --auth-mode login
+
+if has_role "Owner" || has_role "Contributor" || has_role "Reader" || has_role "Storage Account Contributor"; then
+  CAN_READ_SA="true"
+fi
+if has_role "Owner" || has_role "Contributor" || has_role "Storage Account Contributor"; then
+  CAN_LIST_KEYS="true"
+fi
+if has_role "Storage Blob Data Contributor" || has_role "Storage Blob Data Owner" || has_role "Owner"; then
+  CAN_DATA_PLANE_AAD="true"
+fi
+
+cat <<EOF
+현재 신원이 가능한 작업:
+  [$([ "$CAN_READ_SA"        = "true" ] && echo ✓ || echo ✗)] az storage account show               (필요: Reader 이상)
+  [$([ "$CAN_LIST_KEYS"      = "true" ] && echo ✓ || echo ✗)] az storage account keys list          (필요: Storage Account Contributor 이상)
+  [$([ "$CAN_LIST_KEYS"      = "true" ] && echo ✓ || echo ✗)] Terraform backend (state 읽기/쓰기)    (위 keys list 와 동일 권한)
+  [$([ "$CAN_DATA_PLANE_AAD" = "true" ] && echo ✓ || echo ✗)] az --auth-mode login (data-plane AAD)  (필요: Storage Blob Data Contributor)
+EOF
+
+# 부족 권한과 부여 명령
+NEED_GRANTS=()
+[[ "$CAN_READ_SA"    = "false" ]] && NEED_GRANTS+=("Reader")
+[[ "$CAN_LIST_KEYS"  = "false" ]] && NEED_GRANTS+=("Storage Account Contributor")
+# data-plane AAD 는 ARM_ACCESS_KEY 워크어라운드로 회피 가능하므로 필수 아님
+
+if [[ ${#NEED_GRANTS[@]} -eq 0 ]]; then
+  echo ""
+  echo "✓ state backend 동작에 필요한 최소 권한 충족"
+  if [[ "$CAN_DATA_PLANE_AAD" = "false" ]]; then
+    echo "  ※ --auth-mode login (data-plane AAD) 만 미보유. account-key 모드 사용 시 문제 없음."
+  fi
+  if [[ -n "$TOKEN_TID" && -n "$STORAGE_TENANT" && "$TOKEN_TID" != "$STORAGE_TENANT" ]]; then
+    echo "  ※ cross-tenant 시나리오 (token tid=$TOKEN_TID vs storage tenant=$STORAGE_TENANT)"
+    echo "    → README 4-A 의 ARM_ACCESS_KEY 패턴을 그대로 사용하면 됨"
+  fi
+  echo ""
+  echo "Verdict: PERMISSIONS_OK"
+  exit 0
+fi
+
+echo ""
+echo "부족 권한:"
+for r in "${NEED_GRANTS[@]}"; do echo "  - $r"; done
+
+echo ""
+echo "──────────────────────────────────────────────────────────────────────"
+echo " 관리자(Owner / User Access Administrator)가 실행할 부여 명령"
+echo "──────────────────────────────────────────────────────────────────────"
+
+cat <<EOF
+# 대상 식별자 (이 메일/메시지에 그대로 전달 가능)
+ASSIGNEE_OBJECT_ID="$ASSIGNEE_OID"
+ASSIGNEE_DISPLAY="$ASSIGNEE_DISPLAY"
+SUB_ID="$AZ_SUB"
+SA_SCOPE="$SA_SCOPE"
+
+EOF
+
+# Reader 부족하면 Storage Account Contributor 만 부여해도 SA show + keys list 모두 가능
+# (Storage Account Contributor 가 *Microsoft.Storage/storageAccounts/read* 를 포함)
+# 따라서 두 권한이 모두 부족하면 Storage Account Contributor 한 줄만 출력
+if [[ "$CAN_LIST_KEYS" = "false" ]]; then
+cat <<EOF
+# (1) Storage Account Contributor — SA 조회 + access key 발급 (state backend 동작에 필수)
+az role assignment create \\
+  --assignee-object-id "$ASSIGNEE_OID" \\
+  --assignee-principal-type ${ASSIGNEE_TYPE} \\
+  --role "Storage Account Contributor" \\
+  --scope "$SA_SCOPE"
+
+EOF
+elif [[ "$CAN_READ_SA" = "false" ]]; then
+cat <<EOF
+# (1) Reader — SA 메타데이터 조회
+az role assignment create \\
+  --assignee-object-id "$ASSIGNEE_OID" \\
+  --assignee-principal-type ${ASSIGNEE_TYPE} \\
+  --role "Reader" \\
+  --scope "$SA_SCOPE"
+
+EOF
+fi
+
+if [[ "$CAN_DATA_PLANE_AAD" = "false" ]]; then
+cat <<EOF
+# (2) [선택] Storage Blob Data Contributor — --auth-mode login / use_azuread_auth=true 사용 시
+#     account-key 모드(README 4-A)로 우회할 거면 생략 가능
+az role assignment create \\
+  --assignee-object-id "$ASSIGNEE_OID" \\
+  --assignee-principal-type ${ASSIGNEE_TYPE} \\
+  --role "Storage Blob Data Contributor" \\
+  --scope "$SA_SCOPE"
+
+EOF
+fi
+
+# 부여 후 확인 명령
+cat <<EOF
+# 부여 후 SP 본인이 확인
+az role assignment list \\
+  --assignee "$ASSIGNEE_OID" \\
+  --scope "$SA_SCOPE" \\
+  --include-inherited \\
+  -o table
+EOF
+
 hr
-echo "Verdict: $VERDICT"
+echo "Verdict: PERMISSIONS_MISSING (${#NEED_GRANTS[@]} role(s) needed)"
