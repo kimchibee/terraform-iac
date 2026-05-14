@@ -48,11 +48,11 @@ scripts/import/run-all-stacks.sh
 ## 3. 작업 시퀀스 (az login 없이)
 
 ```bash
-# 0) (최초 1회) state backend 가 없으면 부트스트랩 — 두 모드 중 선택
-#    - 단일 SA: cd azure/00.state-backend && terraform init && terraform apply
-#    - 분리 SA: cd azure/hub/00.state-backend && terraform init && terraform apply
-#               cd azure/spoke/00.state-backend && terraform init && terraform apply
-#    상세: 각 디렉토리의 README.md
+# 0) (최초 1회) state backend 가 없으면 부트스트랩
+#    - 분리 SA (표준): cd azure/hub/00.state-backend && terraform init && terraform apply
+#                      cd azure/spoke/00.state-backend && terraform init && terraform apply
+#    - 단일 SA: hub 스택만 실행 + storage_account_name 을 공통명으로 override
+#    상세: azure/hub/00.state-backend/README.md ("단일 SA 모드로 사용하는 법" 절)
 
 # 1) 레포 clone (또는 파일 복사)
 git clone git@github.com:kimchibee/terraform-iac.git

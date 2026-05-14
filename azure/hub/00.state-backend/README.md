@@ -10,18 +10,47 @@ Hub 구독에 Hub leaf 들의 Terraform state 를 저장할 Storage Account 를 
 - 새 PC / 새 환경에서 처음 셋업할 때
 - 이미 운영 SA(`tfstatea9911` 통합 SA 등)가 존재하면 실행 불요
 
-## 단일 SA 모드와의 차이
+## 단일 SA 모드 vs 분리 SA 모드
 
-| 비교 | `azure/00.state-backend/` (단일) | `azure/hub/` + `azure/spoke/00.state-backend/` (분리) |
+| 모드 | 사용 스택 | 비고 |
 |---|---|---|
-| SA 개수 | 1개 (`tfstatea9911`) | 2개 (`tfstatehuba9911`, `tfstatespka9911`) |
-| 구독 | 단일 또는 hub 쪽 | hub 따로, spoke 따로 |
-| 상호 의존 | 단일 장애점 | 측면 간 격리 |
-| `terraform_remote_state` 참조 | 같은 SA 내 key | hub→hub SA, spoke→spoke SA |
-| 적합 시나리오 | 단일 구독 운영, 단순 | 구독 분리, 권한/blast-radius 분리 |
+| **분리 SA** (이 스택 + `azure/spoke/00.state-backend/`) | hub 따로, spoke 따로 | hub/spoke 구독 분리 시나리오 표준. 권한/blast-radius 격리 |
+| **단일 SA** (이 스택만 사용, 이름 override) | hub 만 실행하고 SA 이름을 운영 공통명으로 변경 | 단일 구독, 단순 운영. hub/spoke leaf 가 모두 같은 SA 가리킴 |
 
-현재 코드(`hub_backend_*` 변수)는 두 모델 모두 지원하므로, **leaf tfvars 의
-`hub_backend_storage_account_name` 값**을 어느 SA 로 가리키느냐로 결정됨.
+### 단일 SA 모드로 사용하는 법
+
+이 스택만 실행하고 `terraform.tfvars` 에서 SA 이름을 운영 공통명으로 override:
+
+```hcl
+# azure/hub/00.state-backend/terraform.tfvars
+hub_subscription_id  = "20e3a0f3-f1af-4cc5-8092-dc9b276a9911"
+resource_group_name  = "terraform-state-rg"
+storage_account_name = "tfstatea9911"             # ← 공통 SA 이름
+tags = {
+  ManagedBy = "Terraform"
+  Purpose   = "tfstate"
+  # Side 태그 생략 또는 "shared" 로
+}
+```
+
+그리고 모든 hub/spoke leaf 의 `terraform.tfvars` 에서 backend 이름을 같은 값으로 셋:
+
+```hcl
+# hub leaf 들
+hub_backend_resource_group_name  = "terraform-state-rg"
+hub_backend_storage_account_name = "tfstatea9911"
+hub_backend_container_name       = "tfstate"
+
+# spoke leaf 들 — 같은 SA 가리킴
+spoke_backend_resource_group_name  = "terraform-state-rg"
+spoke_backend_storage_account_name = "tfstatea9911"
+spoke_backend_container_name       = "tfstate"
+```
+
+→ 결과적으로 단일 SA 안에 hub/spoke 모든 leaf 의 state 가 다른 key 로 보관됨.
+
+코드(`hub_backend_*`, `spoke_backend_*` 변수)는 두 모드 모두 지원하므로,
+**leaf tfvars 의 backend 이름 값**이 어느 SA 를 가리키느냐로 결정된다.
 
 ## 실행 절차
 

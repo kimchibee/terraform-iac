@@ -10,9 +10,13 @@ Spoke 구독에 Spoke leaf 들의 Terraform state 를 저장할 Storage Account 
 - 새 PC / 새 환경에서 처음 셋업할 때
 - 이미 운영 SA(`tfstatea9911` 통합 SA 등)가 존재하면 실행 불요
 
-## 단일 SA 모드와의 차이
+## 단일 SA 모드 vs 분리 SA 모드
 
-`azure/hub/00.state-backend/README.md` 와 동일. 두 스택을 한 쌍으로 운용한다.
+상세 비교는 `azure/hub/00.state-backend/README.md` 의 "단일 SA 모드 vs 분리 SA 모드"
+절 참조. 두 스택은 분리 모드일 때 한 쌍으로 운용된다.
+
+단일 SA 모드라면 이 스택은 실행 불요 — hub 측 스택에서 SA 이름을 공통명으로 override
+하고, 이 spoke 측 leaf 들의 `spoke_backend_*` 도 같은 SA 를 가리키도록 셋하면 된다.
 
 ## 실행 절차
 
