@@ -147,8 +147,39 @@ if [[ -z "$PROJECT" ]]; then
       log "name pattern matched RG $SOURCE_RG 지만 prefix 추출 실패"
     fi
   else
-    log "no RG matches pattern '$PATTERN'"
+    log "no RG matches pattern '$PATTERN' from az group list"
   fi
+fi
+
+# (D-fallback) az group list 가 비었거나 list 권한이 없을 때 — 알려진 이름으로 az group show 직접 시도
+# narrow RBAC (특정 RG 만 권한) SP 에서 유용
+if [[ -z "$PROJECT" ]]; then
+  CANDIDATES=()
+  # env.sh 의 TF_VAR_project_name 기반으로 표준 패턴 RG 후보 추가
+  if [[ -n "${TF_VAR_project_name:-}" ]]; then
+    CANDIDATES+=("${TF_VAR_project_name}-x-x-rg")
+    CANDIDATES+=("${TF_VAR_project_name}-x-x-spoke-rg")
+  fi
+  # state backend RG 도 후보 (location/env 보충용)
+  [[ -n "${TF_BACKEND_RG:-}" ]] && CANDIDATES+=("$TF_BACKEND_RG")
+
+  for cand in "${CANDIDATES[@]}"; do
+    RG_JSON=$(az group show --subscription "$SUB" --name "$cand" -o json 2>/dev/null || echo "null")
+    if [[ "$RG_JSON" == "null" || -z "$RG_JSON" ]]; then
+      log "az group show '$cand' → 없음 또는 권한 부족"
+      continue
+    fi
+    log "az group show '$cand' → 성공 (narrow RBAC fallback)"
+    SOURCE_RG="$cand"
+    [[ -z "$LOCATION" ]] && LOCATION=$(echo "$RG_JSON" | jq -r '.location')
+    [[ -z "$ENVIRON"  ]] && ENVIRON=$(echo  "$RG_JSON" | jq -r '.tags.Environment // .tags.environment // empty')
+    [[ -z "$PROJECT"  ]] && PROJECT=$(echo  "$RG_JSON" | jq -r '.tags.Project // .tags.project // empty')
+    if [[ -z "$PROJECT" ]]; then
+      # name pattern 으로 prefix 추출 시도
+      PROJECT=$(echo "$cand" | sed -nE "s/^([a-z0-9]+)${PATTERN}.*$/\1/p")
+    fi
+    [[ -n "$PROJECT" || -n "$LOCATION" ]] && break
+  done
 fi
 
 # (E) location fallback: state RG/SA 에서
@@ -169,7 +200,19 @@ if [[ "$HUMAN" == "true" ]]; then
   fi
   RG_COUNT=$(echo "$ALL_RGS_JSON" | jq 'length')
   if [[ "$RG_COUNT" == "0" ]]; then
-    echo "  (없음 — SP 에 구독 단위 Reader 권한이 없거나 RG 가 0개)" >&2
+    echo "  (none from az group list — sub-scope list 권한이 없거나 구독이 비어있음)" >&2
+    echo "  narrow RBAC 진단:" >&2
+    for cand in \
+      "${TF_VAR_project_name:-test}-x-x-rg" \
+      "${TF_VAR_project_name:-test}-x-x-spoke-rg" \
+      "${TF_BACKEND_RG:-terraform-state-rg}" \
+    ; do
+      if az group show --subscription "$SUB" --name "$cand" --query name -o tsv >/dev/null 2>&1; then
+        echo "    ✓ $cand (az group show 성공)" >&2
+      else
+        echo "    ✗ $cand (없음 또는 권한 부족)" >&2
+      fi
+    done
   else
     echo "$ALL_RGS_JSON" | jq -r '.[] | "  \(.name)  [\(.location)]  tags=\(.tags // {})"' >&2
   fi
