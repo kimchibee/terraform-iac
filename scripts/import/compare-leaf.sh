@@ -14,13 +14,15 @@
 #     (있으면 init/plan 단계에서 실패 — 의존 없는 leaf 만 권장)
 #
 # Usage:
-#   ./scripts/import/compare-leaf.sh <leaf_path> <azure_resource_id> <tf_address> [--keep] [--init-tfvars]
+#   ./scripts/import/compare-leaf.sh <leaf_path> <azure_resource_id> <tf_address> \
+#     [--keep] [--init-tfvars | --edit-tfvars]
 #
 # Example:
 #   ./scripts/import/compare-leaf.sh \
 #     azure/hub/01.network/resource-group/hub-rg \
 #     "/subscriptions/<sub>/resourceGroups/test-x-x-rg" \
-#     "module.resource_group.azurerm_resource_group.this"
+#     "module.resource_group.azurerm_resource_group.this" \
+#     --edit-tfvars
 #
 # Exit codes:
 #   0  Verdict 출력 후 정상 종료 (MATCH / DRIFT / WRONG_IMPORT / NO_CHANGES)
@@ -28,14 +30,15 @@
 #   3  leaf 경로/main.tf 없음
 #   4  기존 imports.tf 존재 (다른 작업 충돌)
 #   5  terraform init 실패
-#   6  terraform.tfvars 없음 (그리고 --init-tfvars 미사용)
+#   6  terraform.tfvars 없음 (그리고 --init-tfvars/--edit-tfvars 미사용)
+#   7  --edit-tfvars 시 \$EDITOR 비정상 종료
 #   기타  terraform plan 실패 그대로 전파
 
 set -uo pipefail
 
 usage() {
   cat >&2 <<EOF
-Usage: $0 <leaf_path> <azure_resource_id> <tf_address> [--keep] [--init-tfvars]
+Usage: $0 <leaf_path> <azure_resource_id> <tf_address> [--keep] [--init-tfvars | --edit-tfvars]
 
 Args:
   leaf_path           e.g. azure/hub/01.network/resource-group/hub-rg
@@ -44,18 +47,22 @@ Args:
 
 Options:
   --keep          임시 파일(backend_override.tf / imports.tf / .terraform/ / state)을 청소하지 않음
-  --init-tfvars   leaf/terraform.tfvars 가 없으면 .example 에서 자동 복사 (없으면 fail)
+  --init-tfvars   leaf/terraform.tfvars 가 없으면 .example 에서 자동 복사 후 즉시 진행 (.example 값 신뢰)
+  --edit-tfvars   --init-tfvars 와 동일하게 복사 + \$EDITOR 로 검토/수정 → 종료 시 진행.
+                  tfvars 가 이미 있어도 검토용으로 editor 를 엶.
 EOF
   exit 2
 }
 
 KEEP="false"
 INIT_TFVARS="false"
+EDIT_TFVARS="false"
 POS=()
 for arg in "$@"; do
   case "$arg" in
     --keep)         KEEP="true" ;;
     --init-tfvars)  INIT_TFVARS="true" ;;
+    --edit-tfvars)  EDIT_TFVARS="true"; INIT_TFVARS="true" ;;   # edit implies init
     -h|--help)      usage ;;
     *)              POS+=("$arg") ;;
   esac
@@ -86,24 +93,44 @@ fi
 # terraform.tfvars 존재 확인 (모든 leaf 가 required vars 를 갖고 있어 부재 시 plan 실패)
 TFVARS="$LEAF_DIR/terraform.tfvars"
 TFVARS_EXAMPLE="$LEAF_DIR/terraform.tfvars.example"
+JUST_COPIED="false"
 if [[ ! -f "$TFVARS" ]]; then
-  if [[ "$INIT_TFVARS" == "true" && -f "$TFVARS_EXAMPLE" ]]; then
+  if [[ "$INIT_TFVARS" == "true" ]]; then
+    if [[ ! -f "$TFVARS_EXAMPLE" ]]; then
+      echo "ERROR: $TFVARS 도 .example 도 없음 — leaf 구조 확인 필요" >&2
+      exit 6
+    fi
     cp "$TFVARS_EXAMPLE" "$TFVARS"
+    JUST_COPIED="true"
     echo "[compare-leaf] $LEAF/terraform.tfvars 를 .example 에서 자동 생성."
-    echo "  값(특히 subscription_id) 이 현재 환경과 맞는지 위 파일을 확인 후 진행하세요."
-    echo "  잘못된 subscription_id 면 plan 이 다른 구독을 보게 됩니다."
   else
     echo "ERROR: $TFVARS 가 없습니다. leaf 의 required variables 값을 알 수 없어 plan 불가." >&2
     if [[ -f "$TFVARS_EXAMPLE" ]]; then
-      echo "  방법 A: 직접 복사 후 값 검토"                              >&2
-      echo "    cp $LEAF/terraform.tfvars.example $LEAF/terraform.tfvars" >&2
-      echo "    \$EDITOR $LEAF/terraform.tfvars"                          >&2
-      echo "  방법 B: --init-tfvars 옵션으로 자동 복사 (값은 검토 필요)"   >&2
+      echo "  방법 A: --edit-tfvars 옵션으로 자동 복사 + \$EDITOR 검토 후 진행"   >&2
+      echo "  방법 B: --init-tfvars 옵션으로 자동 복사 후 즉시 진행 (검토 생략)" >&2
+      echo "  방법 C: 직접 복사 후 값 검토 → 재실행"                              >&2
+      echo "    cp $LEAF/terraform.tfvars.example $LEAF/terraform.tfvars"          >&2
+      echo "    \$EDITOR $LEAF/terraform.tfvars"                                   >&2
     else
       echo "  .example 도 없음 — leaf 구조 확인 필요" >&2
     fi
     exit 6
   fi
+fi
+
+# --edit-tfvars: $EDITOR 로 검토/수정. 복사 직후든 기존 파일이든 동일 동작
+if [[ "$EDIT_TFVARS" == "true" ]]; then
+  EDITOR_CMD="${EDITOR:-vi}"
+  echo "[compare-leaf] $EDITOR_CMD 로 $LEAF/terraform.tfvars 검토 중."
+  echo "  특히 subscription_id 가 현재 환경과 맞는지 확인 후 저장+종료하면 진행됩니다."
+  if ! "$EDITOR_CMD" "$TFVARS"; then
+    echo "ERROR: editor 가 비정상 종료 (exit=$?). 진행 중단." >&2
+    exit 7
+  fi
+  echo "[compare-leaf] tfvars 검토 완료. 진행."
+elif [[ "$JUST_COPIED" == "true" ]]; then
+  # --init-tfvars 만 사용해서 새로 만든 경우의 경고
+  echo "  값(특히 subscription_id) 이 현재 환경과 맞는지 확인하세요. 검토하려면 --edit-tfvars 사용."
 fi
 
 # 청소 함수 — EXIT trap 에서 호출. 어떤 종료 사유든 임시 파일을 정리

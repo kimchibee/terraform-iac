@@ -140,20 +140,34 @@ state SA 도, RBAC 부여도 없이 **코드와 실제 Azure 리소스가 일치
 source scripts/import/env.sh
 ./scripts/import/az-sp-login.sh    # ARM_* 만으로 충분 (storage 권한 불요)
 
+# 방법 A: tfvars 값을 검토/편집하면서 진행 (권장 — 다른 환경/구독에서 안전)
 ./scripts/import/compare-leaf.sh \
   azure/hub/01.network/resource-group/hub-rg \
   "/subscriptions/<hub-sub>/resourceGroups/test-x-x-rg" \
-  "module.resource_group.azurerm_resource_group.this"
+  "module.resource_group.azurerm_resource_group.this" \
+  --edit-tfvars
+
+# 방법 B: .example 값 그대로 신뢰하고 즉시 진행 (현재 production 환경에 한정)
+./scripts/import/compare-leaf.sh <leaf> <id> <addr> --init-tfvars
 ```
 
-출력 마지막 `Verdict`:
+옵션 차이:
 
+| 옵션 | tfvars 부재 시 | tfvars 존재 시 |
+|---|---|---|
+| 없음 | 에러 + 3가지 방법 안내 후 종료 | 그대로 사용 |
+| `--init-tfvars` | `.example` 복사 후 즉시 plan | 그대로 사용 |
+| `--edit-tfvars` | `.example` 복사 → `$EDITOR` 열어 검토 → plan | `$EDITOR` 열어 검토 → plan |
+
+`$EDITOR` 미설정이면 `vi` 사용. 저장 후 종료(`:wq`)하면 진행.
+
+출력 마지막 `Verdict`:
 - `MATCH`         — 코드와 Azure 일치
 - `DRIFT`         — 속성 차이 존재 (위 plan 출력의 `~` 라인 확인)
 - `WRONG_IMPORT`  — destroy 가 보임 (import 주소 또는 ID 검토 필요)
 
 종료 시 `backend_override.tf` / `imports.tf` / `.terraform/` / `terraform.tfstate` 모두
-자동 청소. Azure 와 git 상태에 영향 0.
+자동 청소. Azure 와 git 상태에 영향 0 (tfvars 는 사용자 자산이라 청소 대상 아님).
 
 제약: `terraform_remote_state` 의존성을 갖는 leaf 는 init/plan 실패 — 의존 없는 leaf
 (예: `resource-group/*`, `08.rbac` 일부) 만 권장.
