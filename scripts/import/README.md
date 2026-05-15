@@ -131,6 +131,7 @@ az storage container show \
 |---|---|---|
 | `env.sh` | 공통 환경변수 export (subscription, backend SA, REPO_ROOT 등). SP 변수 우선 인식 | 작업 시작 시 `source` |
 | `setup-tls-trust.sh` | 회사 TLS 인터셉션 환경에서 macOS Keychain + Python certifi 결합 → `~/.config/terraform-iac/combined-ca.pem` 생성 + `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` export | az CLI 가 'SSL Certificate verify failed' 낼 때 1회 (영구 위치) |
+| `diagnose-tls-trust.sh` | env vars / PEM 파일 / management.azure.com issuer / curl 직접 테스트 / az Python 환경 6단계 진단 + verdict 출력 | setup 후에도 SSL 에러 지속 시 |
 | `az-sp-login.sh` | ARM_* env vars 로 az CLI SP 인증 | env.sh source 직후 1회 |
 | `diagnose-storage-auth.sh` | storage data-plane AAD 인증 오류("issuer did not match" 등) 진단. 토큰 tid vs storage subscription tenant 비교 후 자동 판정 | 401/issuer 오류 발생 시 |
 | `discover-project-env.sh` | 구독에서 project_name/environment/location 및 state backend RG/SA 자동 탐지 → 적용 가능한 `export` 라인 출력 | env.sh 의 공통값 셋업, 새 구독 작업 시작 시 |
