@@ -120,6 +120,7 @@ az storage container show \
 | `env.sh` | 공통 환경변수 export (subscription, backend SA, REPO_ROOT 등). SP 변수 우선 인식 | 작업 시작 시 `source` |
 | `az-sp-login.sh` | ARM_* env vars 로 az CLI SP 인증 | env.sh source 직후 1회 |
 | `diagnose-storage-auth.sh` | storage data-plane AAD 인증 오류("issuer did not match" 등) 진단. 토큰 tid vs storage subscription tenant 비교 후 자동 판정 | 401/issuer 오류 발생 시 |
+| `compare-leaf.sh` | backend / state SA 없이 단일 leaf 의 코드 vs Azure drift 체크 (read-only, 로컬 state, 자동 청소) | "코드가 실제와 맞는지" 빠른 검증, 의존 없는 leaf 한정 |
 | `az-inventory.sh` | `az resource list` → `docs/import/inventory.json` + `inventory.csv` | Phase 0 인벤토리 추출 |
 | `leaf-list.sh` | azure/ 하위 모든 leaf (main.tf 디렉토리) 나열 | 매핑 CSV 초안 작성 시 |
 | `tf-backend-key.sh` | leaf 경로 → state backend key 변환 (`azure/dev/<...>/terraform.tfstate`) | 다른 스크립트가 호출 |
@@ -131,7 +132,33 @@ az storage container show \
 
 ---
 
-## 6. 주의사항
+## 6. backend 없이 빠른 drift 체크 (단일 leaf)
+
+state SA 도, RBAC 부여도 없이 **코드와 실제 Azure 리소스가 일치하는지** 한 번에 확인하려면:
+
+```bash
+source scripts/import/env.sh
+./scripts/import/az-sp-login.sh    # ARM_* 만으로 충분 (storage 권한 불요)
+
+./scripts/import/compare-leaf.sh \
+  azure/hub/01.network/resource-group/hub-rg \
+  "/subscriptions/<hub-sub>/resourceGroups/test-x-x-rg" \
+  "module.resource_group.azurerm_resource_group.this"
+```
+
+출력 마지막 `Verdict`:
+
+- `MATCH`         — 코드와 Azure 일치
+- `DRIFT`         — 속성 차이 존재 (위 plan 출력의 `~` 라인 확인)
+- `WRONG_IMPORT`  — destroy 가 보임 (import 주소 또는 ID 검토 필요)
+
+종료 시 `backend_override.tf` / `imports.tf` / `.terraform/` / `terraform.tfstate` 모두
+자동 청소. Azure 와 git 상태에 영향 0.
+
+제약: `terraform_remote_state` 의존성을 갖는 leaf 는 init/plan 실패 — 의존 없는 leaf
+(예: `resource-group/*`, `08.rbac` 일부) 만 권장.
+
+## 7. 주의사항
 
 - **SP RBAC**: Contributor (target 구독), Storage Blob Data Contributor (state SA `tfstatea9911`), Azure AD 관련 leaf(07.identity) 작업 시 `Directory.Read.All` 등 Graph 권한 추가 필요
 - **구독 변수 우선순위**: `ARM_SUBSCRIPTION_ID`가 있으면 `HUB_SUBSCRIPTION_ID`보다 우선. `HUB_SUBSCRIPTION_ID` 기반으로 통일하려면 `unset ARM_SUBSCRIPTION_ID` 후 `source scripts/import/env.sh`
