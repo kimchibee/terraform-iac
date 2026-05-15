@@ -30,6 +30,16 @@ export TF_VAR_spoke_subscription_id="${SPOKE_SUBSCRIPTION_ID:-$AZ_SUB}"
 # Terraform azurerm provider는 ARM_* 변수를 자동 인식 — 별도 처리 불요.
 # az CLI 도 SP 인증으로 동작시키려면 scripts/import/az-sp-login.sh 를 1회 실행할 것.
 
+# TLS 인터셉션 환경 (회사 프록시 등): setup-tls-trust.sh 가 만든 combined-ca.pem
+# 이 있으면 자동 export. 없으면 무동작.
+_tls_pem="${HOME}/.config/terraform-iac/combined-ca.pem"
+if [[ -f "$_tls_pem" ]]; then
+  export REQUESTS_CA_BUNDLE="$_tls_pem"   # Python requests (az CLI)
+  export SSL_CERT_FILE="$_tls_pem"        # Go (Terraform), Python ssl
+  export CURL_CA_BUNDLE="$_tls_pem"       # curl
+fi
+unset _tls_pem
+
 # 리포 루트 (스크립트에서 사용)
 # Resolve script directory in both bash (BASH_SOURCE) and zsh ($0 when sourced)
 _env_sh_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"

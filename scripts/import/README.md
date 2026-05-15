@@ -59,6 +59,12 @@ git clone git@github.com:kimchibee/terraform-iac.git
 cd terraform-iac
 git log --oneline | head -10   # f2bafc7 까지 있는지 확인
 
+# 1-a) (회사 네트워크/macOS) SSL 인터셉션 환경이면 1회 실행
+#       Zscaler/Netskope 등 self-signed CA 가 끼어 있을 때 'SSL Certificate verify
+#       failed' 방지. ~/.config/terraform-iac/combined-ca.pem 영구 생성.
+source scripts/import/setup-tls-trust.sh
+# 이후 env.sh 가 PEM 을 자동 감지하므로 매 세션 source 불필요
+
 # 2) GitLab CI Variables 와 동일한 값을 로컬 셸에 export
 export ARM_CLIENT_ID="<sp-app-id>"
 export ARM_CLIENT_SECRET="<sp-secret>"
@@ -124,6 +130,7 @@ az storage container show \
 | 스크립트 | 역할 | 사용 시점 |
 |---|---|---|
 | `env.sh` | 공통 환경변수 export (subscription, backend SA, REPO_ROOT 등). SP 변수 우선 인식 | 작업 시작 시 `source` |
+| `setup-tls-trust.sh` | 회사 TLS 인터셉션 환경에서 macOS Keychain + Python certifi 결합 → `~/.config/terraform-iac/combined-ca.pem` 생성 + `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` export | az CLI 가 'SSL Certificate verify failed' 낼 때 1회 (영구 위치) |
 | `az-sp-login.sh` | ARM_* env vars 로 az CLI SP 인증 | env.sh source 직후 1회 |
 | `diagnose-storage-auth.sh` | storage data-plane AAD 인증 오류("issuer did not match" 등) 진단. 토큰 tid vs storage subscription tenant 비교 후 자동 판정 | 401/issuer 오류 발생 시 |
 | `discover-project-env.sh` | 구독에서 project_name/environment/location 및 state backend RG/SA 자동 탐지 → 적용 가능한 `export` 라인 출력 | env.sh 의 공통값 셋업, 새 구독 작업 시작 시 |
