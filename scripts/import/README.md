@@ -72,6 +72,12 @@ source scripts/import/env.sh
 ./scripts/import/az-sp-login.sh
 # → "Subscription | TenantId" 표 출력되면 OK
 
+# 3-a) (선택) 현재 구독에서 project/env/location/backend 자동 탐지 후 적용
+#       env.sh 의 default 값(test/dev/Korea Central/...)이 현재 환경과 다를 때 유용
+eval "$(./scripts/import/discover-project-env.sh)"
+# 또는 추론 근거 보면서:
+# ./scripts/import/discover-project-env.sh --human
+
 # 4) state SA 접근 확인 (plan Task 0.1 Step 5)
 #    cross-tenant(Lighthouse 등) 시 --auth-mode login 이 "issuer did not match" 401 을
 #    낼 수 있음 → 권장은 account-key 방식 (아래 4-A). 토큰 issuer 오류가 보이면 4-B 실행.
@@ -120,6 +126,7 @@ az storage container show \
 | `env.sh` | 공통 환경변수 export (subscription, backend SA, REPO_ROOT 등). SP 변수 우선 인식 | 작업 시작 시 `source` |
 | `az-sp-login.sh` | ARM_* env vars 로 az CLI SP 인증 | env.sh source 직후 1회 |
 | `diagnose-storage-auth.sh` | storage data-plane AAD 인증 오류("issuer did not match" 등) 진단. 토큰 tid vs storage subscription tenant 비교 후 자동 판정 | 401/issuer 오류 발생 시 |
+| `discover-project-env.sh` | 구독에서 project_name/environment/location 및 state backend RG/SA 자동 탐지 → 적용 가능한 `export` 라인 출력 | env.sh 의 공통값 셋업, 새 구독 작업 시작 시 |
 | `compare-leaf.sh` | backend / state SA 없이 단일 leaf 의 코드 vs Azure drift 체크 (read-only, 로컬 state, 자동 청소) | "코드가 실제와 맞는지" 빠른 검증, 의존 없는 leaf 한정 |
 | `az-inventory.sh` | `az resource list` → `docs/import/inventory.json` + `inventory.csv` | Phase 0 인벤토리 추출 |
 | `leaf-list.sh` | azure/ 하위 모든 leaf (main.tf 디렉토리) 나열 | 매핑 CSV 초안 작성 시 |
