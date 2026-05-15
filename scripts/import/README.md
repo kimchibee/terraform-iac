@@ -155,11 +155,13 @@ source scripts/import/env.sh
 
 | 옵션 | tfvars 부재 시 | tfvars 존재 시 |
 |---|---|---|
-| 없음 | 에러 + 3가지 방법 안내 후 종료 | 그대로 사용 |
+| 없음 | env.sh 의 공통 TF_VAR_* (project_name/environment/location/sub_id) 가 셋되어 있으면 **그대로 시도**, leaf-specific 변수 부족 시 plan 단계 에러 | 그대로 사용 |
 | `--init-tfvars` | `.example` 복사 후 즉시 plan | 그대로 사용 |
 | `--edit-tfvars` | `.example` 복사 → `$EDITOR` 열어 검토 → plan | `$EDITOR` 열어 검토 → plan |
 
 `$EDITOR` 미설정이면 `vi` 사용. 저장 후 종료(`:wq`)하면 진행.
+
+**TF_VAR_* 우선순위**: terraform 은 `terraform.tfvars` > `TF_VAR_*` env var > `variable` 의 default 순. env.sh 가 export 한 공통 값은 tfvars 가 없을 때만 적용되며, tfvars 가 있으면 tfvars 가 우선합니다.
 
 출력 마지막 `Verdict`:
 - `MATCH`         — 코드와 Azure 일치

@@ -90,10 +90,25 @@ if [[ -f "$IMPORTS_TF" ]]; then
   exit 4
 fi
 
-# terraform.tfvars 존재 확인 (모든 leaf 가 required vars 를 갖고 있어 부재 시 plan 실패)
+# terraform.tfvars 처리 — leaf 가 required vars 를 갖고 있어 부재 시 plan 실패 가능
+#
+# 우선순위 (terraform precedence):
+#   terraform.tfvars > TF_VAR_*(env) > variable 의 default
+# env.sh 는 공통 값(project_name/environment/location/*_subscription_id) 을 TF_VAR_*
+# 로 export. 그래서 leaf-specific 필수 변수만 없으면 tfvars 없이도 plan 가능.
 TFVARS="$LEAF_DIR/terraform.tfvars"
 TFVARS_EXAMPLE="$LEAF_DIR/terraform.tfvars.example"
 JUST_COPIED="false"
+
+# env.sh 가 공통 4 값을 모두 export 했는지 확인 (tfvars 없이 시도할 수 있는 신호)
+ENV_PROVIDES_COMMON="false"
+if [[ -n "${TF_VAR_project_name:-}"        && \
+      -n "${TF_VAR_environment:-}"         && \
+      -n "${TF_VAR_location:-}"            && \
+      ( -n "${TF_VAR_hub_subscription_id:-}" || -n "${TF_VAR_spoke_subscription_id:-}" ) ]]; then
+  ENV_PROVIDES_COMMON="true"
+fi
+
 if [[ ! -f "$TFVARS" ]]; then
   if [[ "$INIT_TFVARS" == "true" ]]; then
     if [[ ! -f "$TFVARS_EXAMPLE" ]]; then
@@ -103,16 +118,17 @@ if [[ ! -f "$TFVARS" ]]; then
     cp "$TFVARS_EXAMPLE" "$TFVARS"
     JUST_COPIED="true"
     echo "[compare-leaf] $LEAF/terraform.tfvars 를 .example 에서 자동 생성."
+  elif [[ "$ENV_PROVIDES_COMMON" == "true" ]]; then
+    # env.sh 가 공통 값을 채우므로 leaf-specific 변수 없는 leaf 면 그대로 진행 가능
+    echo "[compare-leaf] terraform.tfvars 없음 — env.sh 의 TF_VAR_* 값으로 시도합니다:"
+    echo "    project_name=$TF_VAR_project_name  environment=$TF_VAR_environment"
+    echo "    location='$TF_VAR_location'        hub_subscription_id=$TF_VAR_hub_subscription_id"
+    echo "  leaf-specific 변수가 필요하면 plan 단계에서 에러 → --edit-tfvars 로 재실행"
   else
-    echo "ERROR: $TFVARS 가 없습니다. leaf 의 required variables 값을 알 수 없어 plan 불가." >&2
+    echo "ERROR: $TFVARS 가 없고 env.sh 의 공통 TF_VAR_* 도 셋되어 있지 않습니다." >&2
+    echo "  먼저: source scripts/import/env.sh"                                   >&2
     if [[ -f "$TFVARS_EXAMPLE" ]]; then
-      echo "  방법 A: --edit-tfvars 옵션으로 자동 복사 + \$EDITOR 검토 후 진행"   >&2
-      echo "  방법 B: --init-tfvars 옵션으로 자동 복사 후 즉시 진행 (검토 생략)" >&2
-      echo "  방법 C: 직접 복사 후 값 검토 → 재실행"                              >&2
-      echo "    cp $LEAF/terraform.tfvars.example $LEAF/terraform.tfvars"          >&2
-      echo "    \$EDITOR $LEAF/terraform.tfvars"                                   >&2
-    else
-      echo "  .example 도 없음 — leaf 구조 확인 필요" >&2
+      echo "  또는: --edit-tfvars (방법 A) / --init-tfvars (방법 B) / 수동 복사 (방법 C)" >&2
     fi
     exit 6
   fi

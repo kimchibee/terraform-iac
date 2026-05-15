@@ -14,8 +14,16 @@ export TF_BACKEND_RG="terraform-state-rg"
 export TF_BACKEND_SA="tfstatea9911"
 export TF_BACKEND_CONTAINER="tfstate"
 
-# Terraform 변수: subscription_id는 spec §5.1에 따라 환경변수로만 주입
-# HUB_SUBSCRIPTION_ID / SPOKE_SUBSCRIPTION_ID 셋되어 있으면 사용, 없으면 AZ_SUB
+# Terraform 변수 — subscription 단위로 고정인 공통 값
+# (terraform 이 TF_VAR_* 환경변수를 자동 인식. tfvars 가 있으면 tfvars 가 우선)
+# 다른 프로젝트에서 작업할 땐 source 전에 미리 export 로 override:
+#   export TF_VAR_project_name=other-proj
+#   source scripts/import/env.sh
+export TF_VAR_project_name="${TF_VAR_project_name:-test}"
+export TF_VAR_environment="${TF_VAR_environment:-dev}"
+export TF_VAR_location="${TF_VAR_location:-Korea Central}"
+
+# subscription_id: HUB_SUBSCRIPTION_ID / SPOKE_SUBSCRIPTION_ID 셋되어 있으면 사용, 없으면 AZ_SUB
 export TF_VAR_hub_subscription_id="${HUB_SUBSCRIPTION_ID:-$AZ_SUB}"
 export TF_VAR_spoke_subscription_id="${SPOKE_SUBSCRIPTION_ID:-$AZ_SUB}"
 
